@@ -86,10 +86,9 @@ Name|type|size in byte|usage
 pyeList|pyeValueType|1|Value=1
 Size|UInt32|4|Size of the list in bytes; start after header
 Count|UInt32|4|count of items in the list
-Item0|Object||
-Item1|Object||
-Item
-|Object||
+Item0|pyeObject||
+Item1|pyeObject||
+Item|pyeObject||
 
 ### pyeStringUTF8S
 
@@ -136,9 +135,9 @@ pyeArray|pyeValueType|1|Value=20
 ArrayType|pyeValueType|1|value type of the items
 Size|UInt32|4|Size of the array in bytes; start after header
 Count|UInt32|4|count of items in the array
-Item0|Value||
-Item1|Value||
-Item|Value||
+Item0|pyeValue||
+Item1|pyeValue||
+Item|pyeValue||
 
 The pyeArray can contain the following pyeValueTypes:
 - pyeInt8
@@ -178,9 +177,9 @@ MapLength|UInt16|2|Length of the MapStruct; Number of elements of the structure;
 MapStruct|pyeValueTypes|MapLength|pyeValueType and their order of the structure; 1 Byte per value type
 Size|UInt32|4|sizeof value data of complete pyeArrayMap
 Count|UInt32|4|count of items
-Item0|structure||Item with structure of values
-Item1|structure||Item with structure of values
-Item|structure||Item with structure of values
+Item0|structure||Item with structure of pyeValues
+Item1|structure||Item with structure of pyeValues
+Item|structure||Item with structure of pyeValues
 
 The pyeArrayMap can contain the following pyeValueTypes:
 - pyeInt8
@@ -231,14 +230,18 @@ StreamVersionH|UInt16|2|version high of pyeKVS protocol
 StreamVersionL|UInt16|2|version low of pyeKVS protocol
 StreamSize|UInt64|8|size of data after the StoreDataHeader; exluded header 
 
-*StreamPrefix*
-This constant value is just to identify the stream as a pyeKVS stream definition. It's also useful to find the start of a pyeKVS document in a data stream.
-*StreamVersionH*
-The StreamVersion high gives the version if the encoding protocol. Current number:1
-*StreamVersionL*
-The StreamVersion low gives the version if the encoding protocol.  Current number:0
-*StreamSize*
-The StreamSize gives the numbers of bytes for the complete document but excluded document header.
+*StreamPrefix*  
+This constant value is just to identify the stream as a pyeKVS stream definition. It's also useful to find the start of a pyeKVS document in a data stream.  
+
+*StreamVersionH*  
+The StreamVersion high gives the version if the encoding protocol. Current number:1  
+
+*StreamVersionL*  
+The StreamVersion low gives the version if the encoding protocol.  Current number:0  
+
+*StreamSize*  
+The StreamSize gives the numbers of bytes for the complete document but excluded document header.  
+
 
 ### Document data
 The document start allways with an pyeList object, called root list. The Key of the root list is empty. The entry key length is 0.
