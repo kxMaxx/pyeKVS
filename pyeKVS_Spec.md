@@ -15,7 +15,7 @@ The format is equivalent to a binary form of the [JSON](https://www.json.org) fo
 - Specification for a header of the entire document including format version and size
 - Low effort for coding and decoding
 
-## State
+## Version
 Version: 1.0  
 Date: 01.03.2021  
 License:  [MIT](http://opensource.org/licenses/MIT)  
