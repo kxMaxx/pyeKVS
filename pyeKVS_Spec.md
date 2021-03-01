@@ -21,15 +21,15 @@ Date: 01.03.2021
 License:  [MIT](http://opensource.org/licenses/MIT)  
 [pyeKVS home](https://www.kxtec.de/projects/pyekvs/specification)  
 
-## Format Specification
+# Format Specification
 
-### pyeObject
+## pyeObject
 An pyeObject here represents a storage item consisting of a key and a value.  
 An pyeObject is stored in the following sequence.  
 |pyeKey|pyeValue|
 |--|--|
 
-### pyeKey
+## pyeKey
 The key should be passed as an AnsiString. There is no conversation to store the key in the stream. The key data are the AnsiChars of the string.
 Definition|Length of key data|key data|
 |--|--|--|
@@ -39,20 +39,20 @@ The key can be an empty string. Then there is no key data in the stream.
 
 ***Attention:*** All keys in a list should occur only once. The API that collects the values should check for this.
 
-#### pyeValue
+## pyeValue
 The general representation of a value is showing by the following sequence.
 |Definition|pyeValueTypes|value header|value data|
 |--|--|--|--|
 pyeValue|1 Byte |optionally|optionally
 
-#### pyeValueTypes
+### pyeValueTypes
 All values must be mapped into one of the following data formats.
 The pyeValueType is coded with 1Byte.
 
 |Name of value type|DEC value of value type|value header|value data|usage|
 |--|--|--|--|--|
 pyeUnknown|0|no|no|reserved for unknown types
-pyeList|1|4Bytes Size + 4Bytes Count|yes (if size>0)|see notes
+pyeList|1|UInt32 Size + UInt32 Count|yes (if size>0)|see notes
 pyeZero|2|no|no|null, nil, Int=0, Float=0, string=''
 pyeBool|3|no|no|BOOL=true; Int=1
 pyeInt8|4|no|1 Byte|little endian; -128 - 127
@@ -70,11 +70,11 @@ pyeFloat64|15|no|8 Byte|little endian; double
 pyeFloat128|16|no|16 Byte|little endian; reserve
 pyeStringUTF8S|17|UInt8 as char count|UTF8 chars|small; max. 255 chars
 pyeStringUTF8L|18|UInt32 as char count|UTF8 chars|long; max. 4GB chars
-pyeMemory|19|8UInt64 size of mem|mem data bytes|see notes
+pyeMemory|19|UInt32 size of mem|mem data bytes|see notes
 pyeArray|20|pyeValueType + UInt32 Size + UInt32 Count|values|see notes
-pyeArrayMap|21|1Byte map length + map + UInt32 Size + UInt32 Count|values|see notes
+pyeArrayMap|21|UInt8 map length + map + UInt32 Size + UInt32 Count|values|see notes
 
-#### pyeList
+### pyeList
 
 The pyeList is a container for further values given by the pyeObject definition. A pyeList can also contain further sub-lists.
 The pyeList value type has a fix value header with 4 bytes size in bytes and 4 bytes count of items. This information is strictly speaking duplicated. But it is useful in decoding the stream to perform an internal validation.
@@ -91,7 +91,7 @@ Item1|Object||
 Item
 |Object||
 
-#### pyeStringUTF8S
+### pyeStringUTF8S
 
 To encode a small string with maximum 255 chars. The value header has information about the string length. This length is an native UInt8 value. 
 
@@ -103,7 +103,7 @@ CharUTF8|char|0..Length|chars
 
 The API implementation must ensure that the string is encoded as UTF8.
 
-#### pyeStringUTF8L
+### pyeStringUTF8L
 
 To encode a long string with maximum 4GB chars. The value header has information about the string length. This length is an native UInt32 value. 
 
@@ -115,7 +115,7 @@ CharUTF8|char|0..Length|chars
 
 The API implementation must ensure that the string is encoded as UTF8.
 
-#### pyeMemory
+### pyeMemory
 
 To encode a memory block the value header has information about the length of the memory. This length is an native UInt32 value. 
 
@@ -125,7 +125,7 @@ pyeMemory|pyeValueType|1|Value=19
 Length|UInt32|4|size of memory
 memory|Bytes|0..Length|values
 
-#### pyeArray
+### pyeArray
 
 The pyeArray is a container for further values given by the pyeValue definition. The individual items do not have an individual key.
 The array header starts with 1 byte for the value type information of the array items. Then follow 4 bytes size in bytes and 4 bytes count of items. This information is strictly speaking duplicated. But it is useful in decoding the stream to perform an internal validation.
@@ -165,7 +165,7 @@ StreamPos[array value data start] + Index * SizeOf(array value type)
 
 However, this calculation only works for value types with constant value lengths. If the array stores values of type pyeStringUTF8S, pyeStringUTF8L or pyeMemory, the stream position of a value specified by an index is dynamic. It depends on the previous element sizes. The API must encode the complete array by parsing the stream.
 
-#### pyeArrayMap
+### pyeArrayMap
 
 The pyeArrayMap is a container to store items as a map. Map here describes a structure or record of different value types. The value types and their order are defined in the header of the pyeArrayMap object. A structure can contain a maximum of 65535 elements. All array items use the same map definition.
 The pyeArrayMap can contain the same value types like the Array object.
@@ -219,11 +219,11 @@ Examples:
 Conversely, when reading out the values, it must also be possible to return a pyeUInt8 value type as an Int32 value. It must be also possible to return a value type pyeZero as an empty string.
 
 
-### Document
+## Document
 A document describes the encapsulation of a pyeKVS data set. Usually it is a data stream for a file or a socket.
 The document starts with a fixed header definition (structure or record).
 
-#### Document header
+### Document header
 Name|type|size in byte|usage
 |--|--|--|--|
 StreamPrefix|UInt32|4|constant: $53455950 (PYES)
@@ -240,19 +240,20 @@ The StreamVersion low gives the version if the encoding protocol.  Current numbe
 *StreamSize*
 The StreamSize gives the numbers of bytes for the complete document but excluded document header.
 
-#### Document data
+### Document data
 The document start allways with an pyeList object, called root list. The Key of the root list is empty. The entry key length is 0.
+
 
 ## Appendix
 
-#### StreamPrefix
+### StreamPrefix
 $53455950 (Longword)
 
-#### Root List
+### Root List
 Key of root list: '' (empty AnsiString)
 
-#### Example
-##### Example 1: Root list with two values; Integer and String
+## Example
+### Example 1: Root list with two values; Integer and String
 ```
 {
     MyValue1 (pyeInt16) : 256
@@ -284,7 +285,7 @@ stream data [HEX]       comment
 How to implement this format is generally not defined. 
 
 The following procedure would be recommended:
-#### Create pyeKVS stream to store values
+### Create pyeKVS stream to store values
 
  1. Create pyeDocument
  2. Start of value recording
@@ -292,7 +293,7 @@ The following procedure would be recommended:
  4. End the value recording; this can finish the stream and update the data sizes
  5. Use the pyeDocument to save the stream somewhere or transmit to a socket
 
-#### Receive a pyeKVS stream
+### Receive a pyeKVS stream
 
  1. Create pyeDocument
  2. Read the pyeDocument header from a socket into the PyeKVS stream
