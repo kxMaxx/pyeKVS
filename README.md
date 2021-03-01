@@ -20,7 +20,7 @@ License:  [MIT](http://opensource.org/licenses/MIT)
 
 
 ## Project
-This pyeKVS project is a pascal implementation für Delphi. It's stores the data to stream.
+This pyeKVS project is a pascal implementation for Delphi. It's stores the data into a stream.
 
 ## License
 License:  [MIT](http://opensource.org/licenses/MIT)

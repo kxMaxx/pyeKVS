@@ -1,6 +1,6 @@
 # pyeKVS format
 pyeKVS is a Key Value Storage format.
-The name pyeKVS initially stands only for a format description.
+The name pyeKVS initially stands only for a format description.  
 The format is equivalent to a binary form of the [JSON](https://www.json.org) format.
 
 ## Features
@@ -16,16 +16,16 @@ The format is equivalent to a binary form of the [JSON](https://www.json.org) fo
 - Low effort for coding and decoding
 
 ## State
-Version: 1.0
-Date: 01.03.2021
-License:  ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-[pyeKVS home](https://www.kxtec.de/projects/pyekvs/specification)
+Version: 1.0  
+Date: 01.03.2021  
+License:  [MIT](http://opensource.org/licenses/MIT)  
+[pyeKVS home](https://www.kxtec.de/projects/pyekvs/specification)  
 
 ## Format Specification
 
 ### pyeObject
-An pyeObject here represents a storage item consisting of a key and a value.
-An pyeObject is stored in the following sequence.
+An pyeObject here represents a storage item consisting of a key and a value.  
+An pyeObject is stored in the following sequence.  
 |pyeKey|pyeValue|
 |--|--|
 
