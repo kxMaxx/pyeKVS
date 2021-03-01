@@ -72,7 +72,7 @@ pyeStringUTF8S|17|UInt8 as char count|UTF8 chars|small; max. 255 chars
 pyeStringUTF8L|18|UInt32 as char count|UTF8 chars|long; max. 4GB chars
 pyeMemory|19|UInt32 size of mem|mem data bytes|see notes
 pyeArray|20|pyeValueType + UInt32 Size + UInt32 Count|values|see notes
-pyeArrayMap|21|UInt8 map length + map + UInt32 Size + UInt32 Count|values|see notes
+pyeArrayMap|21|UInt16 map length + map + UInt32 Size + UInt32 Count|values|see notes
 
 ### pyeList
 
@@ -171,19 +171,19 @@ The pyeArrayMap is a container to store items as a map. Map here describes a str
 The pyeArrayMap can contain the same value types like the Array object.
 
 The header of an pyeArrayMap has a dynamic length, as it depends on the length of the map.
+
 Name|type|size in byte|usage
 pyeArrayMap|pyeValueType|1|Value=21
-MapLength|Word|2|Length of the MapStruct; Number of elements of the structure; Max. 65535
+|--|--|--|--|
+MapLength|UInt16|2|Length of the MapStruct; Number of elements of the structure; Max. 65535
 MapStruct|pyeValueTypes|MapLength|pyeValueType and their order of the structure; 1 Byte per value type
 Size|UInt32|4|sizeof value data of complete pyeArrayMap
 Count|UInt32|4|count of items
 Item0|structure||Item with structure of objects
 Item1|structure||Item with structure of objects
-Item
-|structure||Item with structure of objects
+Item|structure||Item with structure of objects
 
 The pyeArrayMap can contain the following pyeValueTypes:
-
 - pyeInt8
 - pyeUInt8
 - pyeInt16
