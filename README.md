@@ -2,11 +2,12 @@
 PyeKVS is a Key-Value-Storage format for data serialization. The format corresponds to the JSON format, but the values are binary encoded.
 
 ### Format specification
-see [pyeKVS_Spec.md]
-Version: 1.0
-Date: 01.03.2021
-License:  ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-[pyeKVS home](https://www.kxtec.de/projects/pyekvs/specification)
+see [pyeKVS_Spec.md](pyeKVS_Spec.md) 
+Version: 1.0 
+Date: 01.03.2021 
+License:  [MIT](http://opensource.org/licenses/MIT) 
+[pyeKVS home](https://www.kxtec.de/projects/pyekvs/specification) 
+
 
 ### Features
 - Storage of an object as a set of key and value
@@ -22,13 +23,13 @@ License:  ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 This pyeKVS project is a pascal implementation für Delphi. It's stores the data to stream.
 
 ## License
- * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+License:  [MIT](http://opensource.org/licenses/MIT)
 
 ## Project state
-Version: 1
-Date: 16.01.2021
-Author: Michael Koch
-[pyeKVS for Delphi](https://www.kxtec.de/projects/pyekvs/delphi_api)
+Version: 1 
+Date: 16.01.2021 
+Author: Michael Koch 
+[pyeKVS for Delphi](https://www.kxtec.de/projects/pyekvs/delphi_api) 
 
 ## Usage
 
