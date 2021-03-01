@@ -168,20 +168,19 @@ However, this calculation only works for value types with constant value lengths
 ### pyeArrayMap
 
 The pyeArrayMap is a container to store items as a map. Map here describes a structure or record of different value types. The value types and their order are defined in the header of the pyeArrayMap object. A structure can contain a maximum of 65535 elements. All array items use the same map definition.
-The pyeArrayMap can contain the same value types like the Array object.
 
 The header of an pyeArrayMap has a dynamic length, as it depends on the length of the map.
 
 Name|type|size in byte|usage
-pyeArrayMap|pyeValueType|1|Value=21
 |--|--|--|--|
+pyeArrayMap|pyeValueType|1|Value=21
 MapLength|UInt16|2|Length of the MapStruct; Number of elements of the structure; Max. 65535
 MapStruct|pyeValueTypes|MapLength|pyeValueType and their order of the structure; 1 Byte per value type
 Size|UInt32|4|sizeof value data of complete pyeArrayMap
 Count|UInt32|4|count of items
-Item0|structure||Item with structure of objects
-Item1|structure||Item with structure of objects
-Item|structure||Item with structure of objects
+Item0|structure||Item with structure of values
+Item1|structure||Item with structure of values
+Item|structure||Item with structure of values
 
 The pyeArrayMap can contain the following pyeValueTypes:
 - pyeInt8
@@ -199,13 +198,14 @@ The pyeArrayMap can contain the following pyeValueTypes:
 - pyeFloat128
 - pyeStringUTF8S (dynamic length!)
 - pyeStringUTF8L (dynamic length!)
+- pyeMemory (dynamic length!)
 
 In value data the items of the array are stored consecutively.
 The position of an array item in the stream is given by
 
 StreamPos[array value data start] + Index * SizeOf(MapStruct)
 
-However, this calculation only works for value types with constant value lengths. If the MapStruct stores values of type pyeStringUTF8S or pyeStringUTF8L, the stream position of a value specified by an index is dynamic. It depends on the previous element sizes. The API must encode the complete array by parsing the stream.
+However, this calculation only works for value types with constant value lengths. If the MapStruct stores values of type pyeStringUTF8S, pyeStringUTF8L or pyeMemory, the stream position of a value specified by an index is dynamic. It depends on the previous element sizes. The API must encode the complete array by parsing the stream.
 
 
 ### Value conversation
@@ -213,7 +213,7 @@ The API implementation is free to convert the values into the shortest possible 
 
 Examples:
 - Integer is a typical value in any programming language. In pyeKVS the storage would be as pyeInt32 with 1Byte value type + 4Byte value = 5Bytes in total. If the value is very small enough then it can be stored as pyeInt16 (3Bytes) or pyeUInt8 (2Bytes) or as pyeZero (1Byte) for example.
-- Source pyeFloat64 (Double) Value can be stored as value type pyeFloat32, if no loss of accuracy or pyeZero.
+- Source pyeFloat64 (Double) Value can be stored as value type pyeFloat32, if no loss of accuracy or pyeZero if value==0.0.
 - String value=” (empty) can be stored as pyeZero.
 
 Conversely, when reading out the values, it must also be possible to return a pyeUInt8 value type as an Int32 value. It must be also possible to return a value type pyeZero as an empty string.
