@@ -218,11 +218,11 @@ Examples:
 Conversely, when reading out the values, it must also be possible to return a pyeUInt8 value type as an Int32 value. It must be also possible to return a value type pyeZero as an empty string.
 
 
-## Document
+## pyeDocument
 A document describes the encapsulation of a pyeKVS data set. Usually it is a data stream for a file or a socket.
 The document starts with a fixed header definition (structure or record).
 
-### Document header
+### pyeDocument header
 Name|type|size in byte|usage
 |--|--|--|--|
 StreamPrefix|UInt32|4|constant: $53455950 (PYES)
@@ -243,7 +243,7 @@ The StreamVersion low gives the version if the encoding protocol.  Current numbe
 The StreamSize gives the numbers of bytes for the complete document but excluded document header.  
 
 
-### Document data
+### pyeDocument data
 The document start allways with an pyeList object, called root list. The Key of the root list is empty. The entry key length is 0.
 
 
