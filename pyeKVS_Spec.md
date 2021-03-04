@@ -19,7 +19,7 @@ The format is equivalent to a binary form of the [JSON](https://www.json.org) fo
 Version: 1.0  
 Date: 01.03.2021  
 License:  [MIT](http://opensource.org/licenses/MIT)  
-[pyeKVS home](https://www.kxtec.de/projects/pyekvs/specification)  
+Home: [https://www.kxtec.de/project/pyekvs/pyekvs-specification](https://www.kxtec.de/project/pyekvs/pyekvs-specification)  
 
 # Format Specification
 
@@ -41,7 +41,7 @@ The key can be an empty string. Then there is no key data in the stream.
 
 ## pyeValue
 The general representation of a value is showing by the following sequence.
-|Definition|pyeValueTypes|value header|value data|
+|Definition|pyeValueType|value header|value data|
 |--|--|--|--|
 pyeValue|1 Byte |optionally|optionally
 
@@ -49,7 +49,7 @@ pyeValue|1 Byte |optionally|optionally
 All values must be mapped into one of the following data formats.
 The pyeValueType is coded with 1Byte.
 
-|Name of value type|DEC value of value type|value header|value data|usage|
+|Name of value type|DEC value of pyeValueType|value header|value data|usage|
 |--|--|--|--|--|
 pyeUnknown|0|no|no|reserved for unknown types
 pyeList|1|UInt32 Size + UInt32 Count|yes (if size>0)|see notes
@@ -122,7 +122,7 @@ Name|type|size in byte|usage
 |--|--|--|--|
 pyeMemory|pyeValueType|1|Value=19
 Length|UInt32|4|size of memory
-memory|Bytes|0..Length|values
+Memory|Bytes|0..Length|values
 
 ### pyeArray
 
@@ -175,8 +175,8 @@ Name|type|size in byte|usage
 pyeArrayMap|pyeValueType|1|Value=21
 MapLength|UInt16|2|Length of the MapStruct; Number of elements of the structure; Max. 65535
 MapStruct|pyeValueTypes|MapLength|pyeValueType and their order of the structure; 1 Byte per value type
-Size|UInt32|4|sizeof value data of complete pyeArrayMap
-Count|UInt32|4|count of items
+Size|UInt32|4|Size of the pyeArrayMap in bytes; start after header
+Count|UInt32|4|count of items in the array
 Item0|structure||Item with structure of pyeValues
 Item1|structure||Item with structure of pyeValues
 Item|structure||Item with structure of pyeValues
@@ -250,7 +250,7 @@ The document start allways with an pyeList object, called root list. The Key of 
 ## Appendix
 
 ### StreamPrefix
-$53455950 (Longword)
+$53455950 (UInt32)
 
 ### Root List
 Key of root list: '' (empty AnsiString)

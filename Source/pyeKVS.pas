@@ -325,7 +325,12 @@ type
         destructor Destroy; override;
         procedure Clear(); override;
 
+        //ValueTypeMap of the pyeArrayMap; after PutItem or Encode
         property ValueTypeMap: TPYEKVSValueTypeMap read FValueTypeMap;
+
+        //ValueTypeMap compare internal map with external aMap
+        function ValueTypeMapEqual(const aMap: TPYEKVSValueTypeMap):Boolean;
+
         property Count: Int64 read GetCount;
 
         procedure ToStringsJSON(const aString: TStrings; const aIndenting: string; const aActIndenting: string; const aOutName: Boolean); override;
@@ -1833,7 +1838,7 @@ begin
     if FKeys.TryGetValue(aKey, iPos) then begin
         KVSStream.Position:=iPos;
         KVSStream.ReadValueType(iVT);
-        if (iVT=pyeArray) then begin
+        if (iVT=pyeArrayMap) then begin
             if FList.TryGetValue(iPos, iBranch) then begin
                 result:=TPYEKVSArrayMap(iBranch);
             end;
@@ -3607,6 +3612,21 @@ function TPYEKVSArrayMap.GetCount: Int64;
 begin
     result:=FCount;
 end;
+
+function TPYEKVSArrayMap.ValueTypeMapEqual(const aMap: TPYEKVSValueTypeMap):Boolean;
+var i,k:Integer;
+begin
+    //Compare aMap with internal ValueTypeMap; result=true if match
+    k:=High(FValueTypeMap);
+    if (High(aMap)<>k) then
+        exit(false);                            //Length different
+    for i:=0 to k do begin
+        if (FValueTypeMap[i]<>aMap[i]) then
+            exit(false);                        //ValueType different
+    end;
+    result:=true;
+end;
+
 
 function TPYEKVSArrayMap.Encode():Integer;
 var uSize:Cardinal;

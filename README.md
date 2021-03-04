@@ -24,7 +24,7 @@ This pyeKVS project is a pascal implementation for Delphi. It's stores the data 
 Version: 1  
 Date: 16.01.2021  
 Author: Michael Koch  
-[pyeKVS for Delphi](https://www.kxtec.de/projects/pyekvs/delphi_api)  
+Home: [pyeKVS for Delphi](https://www.kxtec.de/project/pyekvs/pyekvs-delphi)  
 
 ## License
 License:  [MIT](http://opensource.org/licenses/MIT)
