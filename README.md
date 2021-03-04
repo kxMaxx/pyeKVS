@@ -6,7 +6,7 @@ see [pyeKVS_Spec.md](pyeKVS_Spec.md)
 Version: 1.0  
 Date: 01.03.2021  
 License:  [MIT](http://opensource.org/licenses/MIT)  
-[pyeKVS home](https://www.kxtec.de/project/pyekvs/pyekvs-specification)  
+Home: [pyeKVS specification](https://www.kxtec.de/project/pyekvs/pyekvs-specification)  
 
 ## Features
 - Storage of an object as a set of key and value
