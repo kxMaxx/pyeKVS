@@ -2,8 +2,8 @@ object Main: TMain
   Left = 0
   Top = 0
   Caption = 'pyeKVS Testbench by kxMaxx'
-  ClientHeight = 966
-  ClientWidth = 777
+  ClientHeight = 750
+  ClientWidth = 944
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -13,162 +13,19 @@ object Main: TMain
   OldCreateOrder = False
   PixelsPerInch = 96
   TextHeight = 13
-  object PTop: TPanel
-    Left = 0
-    Top = 0
-    Width = 777
-    Height = 59
-    Align = alTop
-    TabOrder = 0
-    object BWriteFile: TButton
-      AlignWithMargins = True
-      Left = 269
-      Top = 5
-      Width = 124
-      Height = 49
-      Margins.Left = 0
-      Margins.Top = 4
-      Margins.Right = 4
-      Margins.Bottom = 4
-      Align = alLeft
-      Caption = 'Write to file'
-      TabOrder = 0
-      OnClick = BWriteFileClick
-    end
-    object BReadFile: TButton
-      AlignWithMargins = True
-      Left = 397
-      Top = 5
-      Width = 124
-      Height = 49
-      Margins.Left = 0
-      Margins.Top = 4
-      Margins.Right = 4
-      Margins.Bottom = 4
-      Align = alLeft
-      Caption = 'Read from file'
-      TabOrder = 1
-      OnClick = BReadFileClick
-    end
-    object BStreamCopy: TButton
-      AlignWithMargins = True
-      Left = 525
-      Top = 5
-      Width = 124
-      Height = 49
-      Margins.Left = 0
-      Margins.Top = 4
-      Margins.Right = 4
-      Margins.Bottom = 4
-      Align = alLeft
-      Caption = 'Stream copy'
-      TabOrder = 2
-      OnClick = BStreamCopyClick
-    end
-    object RGLog: TRadioGroup
-      AlignWithMargins = True
-      Left = 653
-      Top = 1
-      Width = 124
-      Height = 53
-      Margins.Left = 0
-      Margins.Top = 0
-      Margins.Right = 4
-      Margins.Bottom = 4
-      Align = alLeft
-      Caption = 'Log mode'
-      ItemIndex = 0
-      Items.Strings = (
-        'Simple'
-        'JSON')
-      TabOrder = 3
-      OnClick = RGLogClick
-    end
-    object PButton1: TPanel
-      AlignWithMargins = True
-      Left = 5
-      Top = 5
-      Width = 128
-      Height = 49
-      Margins.Left = 4
-      Margins.Top = 4
-      Margins.Right = 4
-      Margins.Bottom = 4
-      Align = alLeft
-      BevelOuter = bvNone
-      TabOrder = 4
-      object BNewRnd: TButton
-        AlignWithMargins = True
-        Left = 0
-        Top = 0
-        Width = 128
-        Height = 25
-        Margins.Left = 0
-        Margins.Top = 0
-        Margins.Right = 0
-        Margins.Bottom = 2
-        Align = alTop
-        Caption = 'Create Random'
-        TabOrder = 0
-        OnClick = BNewRndClick
-      end
-    end
-    object PButton2: TPanel
-      AlignWithMargins = True
-      Left = 137
-      Top = 5
-      Width = 128
-      Height = 49
-      Margins.Left = 0
-      Margins.Top = 4
-      Margins.Right = 4
-      Margins.Bottom = 4
-      Align = alLeft
-      BevelOuter = bvNone
-      TabOrder = 5
-      object BNewHandMade: TButton
-        Left = 0
-        Top = 25
-        Width = 128
-        Height = 25
-        Margins.Left = 0
-        Margins.Top = 0
-        Margins.Right = 0
-        Margins.Bottom = 2
-        Align = alTop
-        Caption = 'Create handmade'
-        TabOrder = 0
-        OnClick = BNewHandMadeClick
-      end
-      object BNewSimple1: TButton
-        Left = 0
-        Top = 0
-        Width = 128
-        Height = 25
-        Margins.Left = 0
-        Margins.Top = 0
-        Margins.Right = 0
-        Margins.Bottom = 0
-        Align = alTop
-        Caption = 'Create Simple'
-        TabOrder = 1
-        OnClick = BNewSimple1Click
-      end
-    end
-  end
   object PMemo: TPanel
-    Left = 0
-    Top = 59
-    Width = 777
-    Height = 907
+    Left = 201
+    Top = 0
+    Width = 743
+    Height = 731
     Align = alClient
-    TabOrder = 1
+    TabOrder = 0
     object Memo: TMemo
       AlignWithMargins = True
       Left = 5
       Top = 5
-      Width = 767
-      Height = 878
+      Width = 733
+      Height = 721
       Margins.Left = 4
       Margins.Top = 4
       Margins.Right = 4
@@ -178,16 +35,315 @@ object Main: TMain
       ScrollBars = ssBoth
       TabOrder = 0
     end
-    object StatusBar: TStatusBar
-      Left = 1
-      Top = 887
-      Width = 775
-      Height = 19
-      Panels = <
-        item
-          Text = 'Time'
-          Width = 150
-        end>
+  end
+  object PCreator: TPanel
+    Left = 0
+    Top = 0
+    Width = 201
+    Height = 731
+    Align = alLeft
+    ParentBackground = False
+    ParentColor = True
+    TabOrder = 1
+    object GBMemory: TGroupBox
+      AlignWithMargins = True
+      Left = 4
+      Top = 138
+      Width = 193
+      Height = 159
+      Align = alTop
+      Caption = 'Memory stream'
+      TabOrder = 0
+      object BMemorySimple1: TButton
+        AlignWithMargins = True
+        Left = 4
+        Top = 44
+        Width = 185
+        Height = 25
+        Margins.Left = 2
+        Margins.Top = 2
+        Margins.Right = 2
+        Margins.Bottom = 0
+        Align = alTop
+        Caption = 'Create Simple in RAM'
+        TabOrder = 0
+        OnClick = BMemorySimple1Click
+      end
+      object BMemoryHandMade: TButton
+        AlignWithMargins = True
+        Left = 4
+        Top = 17
+        Width = 185
+        Height = 25
+        Margins.Left = 2
+        Margins.Top = 2
+        Margins.Right = 2
+        Margins.Bottom = 0
+        Align = alTop
+        Caption = 'Create handmade in RAM'
+        TabOrder = 1
+        OnClick = BMemoryHandMadeClick
+      end
+      object BMemoryRnd: TButton
+        AlignWithMargins = True
+        Left = 4
+        Top = 71
+        Width = 185
+        Height = 25
+        Margins.Left = 2
+        Margins.Top = 2
+        Margins.Right = 2
+        Margins.Bottom = 0
+        Align = alTop
+        Caption = 'Create Random in RAM'
+        TabOrder = 2
+        OnClick = BMemoryRndClick
+      end
+      object BMemoryWriteFile: TButton
+        AlignWithMargins = True
+        Left = 4
+        Top = 98
+        Width = 185
+        Height = 25
+        Margins.Left = 2
+        Margins.Top = 2
+        Margins.Right = 2
+        Margins.Bottom = 0
+        Align = alTop
+        Caption = 'Write to file'
+        TabOrder = 3
+        OnClick = BMemoryWriteFileClick
+      end
+      object BMemoryReadFile: TButton
+        AlignWithMargins = True
+        Left = 4
+        Top = 125
+        Width = 185
+        Height = 25
+        Margins.Left = 2
+        Margins.Top = 2
+        Margins.Right = 2
+        Margins.Bottom = 0
+        Align = alTop
+        Caption = 'Read from file'
+        TabOrder = 4
+        OnClick = BMemoryReadFileClick
+      end
     end
+    object GBUserStream: TGroupBox
+      AlignWithMargins = True
+      Left = 4
+      Top = 423
+      Width = 193
+      Height = 114
+      Align = alTop
+      Caption = 'External stream'
+      TabOrder = 1
+      object BUserStreamHandMade: TButton
+        AlignWithMargins = True
+        Left = 4
+        Top = 17
+        Width = 185
+        Height = 25
+        Margins.Left = 2
+        Margins.Top = 2
+        Margins.Right = 2
+        Margins.Bottom = 0
+        Align = alTop
+        Caption = 'Create handmade to file'
+        TabOrder = 0
+        OnClick = BUserStreamHandMadeClick
+      end
+      object BUserStreamRandom: TButton
+        AlignWithMargins = True
+        Left = 4
+        Top = 44
+        Width = 185
+        Height = 25
+        Margins.Left = 2
+        Margins.Top = 2
+        Margins.Right = 2
+        Margins.Bottom = 0
+        Align = alTop
+        Caption = 'Create Random to file'
+        TabOrder = 1
+        OnClick = BUserStreamRandomClick
+      end
+      object BUserStreamlRead: TButton
+        AlignWithMargins = True
+        Left = 4
+        Top = 71
+        Width = 185
+        Height = 25
+        Margins.Left = 2
+        Margins.Top = 2
+        Margins.Right = 2
+        Margins.Bottom = 0
+        Align = alTop
+        Caption = 'Read direct from file'
+        TabOrder = 2
+        OnClick = BUserStreamlReadClick
+      end
+    end
+    object RGLog: TRadioGroup
+      AlignWithMargins = True
+      Left = 4
+      Top = 4
+      Width = 193
+      Height = 64
+      Align = alTop
+      Caption = 'Log mode'
+      ItemIndex = 0
+      Items.Strings = (
+        'Simple'
+        'JSON')
+      TabOrder = 2
+      OnClick = RGLogClick
+    end
+    object GBInfo: TGroupBox
+      AlignWithMargins = True
+      Left = 4
+      Top = 677
+      Width = 193
+      Height = 50
+      Align = alBottom
+      Caption = 'Info'
+      TabOrder = 3
+      object BAbout: TButton
+        AlignWithMargins = True
+        Left = 4
+        Top = 17
+        Width = 185
+        Height = 25
+        Margins.Left = 2
+        Margins.Top = 2
+        Margins.Right = 2
+        Margins.Bottom = 0
+        Align = alTop
+        Caption = 'About'
+        TabOrder = 0
+        OnClick = BAboutClick
+      end
+    end
+    object GBFile: TGroupBox
+      AlignWithMargins = True
+      Left = 4
+      Top = 303
+      Width = 193
+      Height = 114
+      Align = alTop
+      Caption = 'File stream'
+      TabOrder = 4
+      object BFileHandmade: TButton
+        AlignWithMargins = True
+        Left = 4
+        Top = 17
+        Width = 185
+        Height = 25
+        Margins.Left = 2
+        Margins.Top = 2
+        Margins.Right = 2
+        Margins.Bottom = 0
+        Align = alTop
+        Caption = 'Create handmade to file'
+        TabOrder = 0
+        OnClick = BFileHandmadeClick
+      end
+      object BFileRnd: TButton
+        AlignWithMargins = True
+        Left = 4
+        Top = 44
+        Width = 185
+        Height = 25
+        Margins.Left = 2
+        Margins.Top = 2
+        Margins.Right = 2
+        Margins.Bottom = 0
+        Align = alTop
+        Caption = 'Create Random to file'
+        TabOrder = 1
+        OnClick = BFileRndClick
+      end
+      object BFileRead: TButton
+        AlignWithMargins = True
+        Left = 4
+        Top = 71
+        Width = 185
+        Height = 25
+        Margins.Left = 2
+        Margins.Top = 2
+        Margins.Right = 2
+        Margins.Bottom = 0
+        Align = alTop
+        Caption = 'Read direct from file'
+        TabOrder = 2
+        OnClick = BFileReadClick
+      end
+    end
+    object GBSpecial: TGroupBox
+      AlignWithMargins = True
+      Left = 4
+      Top = 543
+      Width = 193
+      Height = 58
+      Align = alTop
+      Caption = 'Specials'
+      TabOrder = 5
+      object BMemoryStreamCopy: TButton
+        AlignWithMargins = True
+        Left = 4
+        Top = 17
+        Width = 185
+        Height = 25
+        Margins.Left = 2
+        Margins.Top = 2
+        Margins.Right = 2
+        Margins.Bottom = 0
+        Align = alTop
+        Caption = 'Stream copy (e.g. TCP)'
+        TabOrder = 0
+        OnClick = BMemoryStreamCopyClick
+      end
+    end
+    object GBGeneral: TGroupBox
+      AlignWithMargins = True
+      Left = 4
+      Top = 74
+      Width = 193
+      Height = 58
+      Align = alTop
+      Caption = 'General'
+      TabOrder = 6
+      object BClear: TButton
+        AlignWithMargins = True
+        Left = 4
+        Top = 17
+        Width = 185
+        Height = 25
+        Margins.Left = 2
+        Margins.Top = 2
+        Margins.Right = 2
+        Margins.Bottom = 0
+        Align = alTop
+        Caption = 'Clear'
+        TabOrder = 0
+        OnClick = BClearClick
+      end
+    end
+  end
+  object StatusBar: TStatusBar
+    Left = 0
+    Top = 731
+    Width = 944
+    Height = 19
+    Panels = <
+      item
+        Text = 'Time:'
+        Width = 150
+      end
+      item
+        Text = 'Size:'
+        Width = 50
+      end>
   end
 end

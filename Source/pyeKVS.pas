@@ -37,6 +37,14 @@ unit pyeKVS;
     Readme.md
     Version: 1 from 01.03.2021 for pyeKVS V 1.0
     - initial release
+    Version: 2 from 14.03.2021 for pyeKVS V 1.0
+    - update pyeList to use external interfaces
+    - update pyeDocument
+      - New constructor to define custom container classes for
+        pyeKVSList, pyeKVSArray and pyeKVSArrayMap
+        User can overwrite these classes to e.g. define own interfaces.
+      - New constructor to define custom stream classes. Useful to write values
+        direct in userdef stream class
   ==================================================================================== }
 
 interface
@@ -116,6 +124,14 @@ type
         srzstate_Closed
     );
 
+    ///internal Stream type for the document
+    TPYEKVSStreamType=(
+        pyeStreamMemory,        //document use a internal memory stream; double memory consumption; good for TCP transmistions
+        pyeStreamFile,          //document use a internal file stream; values Put function write direct in the file; low memory consumption
+        pyeStreamUser           //document use a forign user stream; values Put function write direct in that stream
+    );
+
+
     //Head of every store stream
     //useful by stream reading (e.g. socket operations)
     PPYEKVSStreamHeader = ^TPYEKVSStreamHeader;
@@ -183,32 +199,56 @@ const
 
 type
     TPYEKVSDocument=class;
-    TPYEKVSStream=class;
+    TPYEKVSList=class;
 
     TPYEKVSMethod = procedure() of object;
 
-    TPYEKVSBranch=class(TObject)
+
+    /// <summary>
+    ///     TPYEKVSObject base class with QueryInterface implemention
+    ///     Gives the possibility that derived classes can use an interface without reference counter.
+    /// </summary>
+    TPYEKVSObject=class(TObject)
+    protected
+        function QueryInterface(const IID: TGUID; out Obj): HResult; stdcall;
+        function _AddRef: Integer; stdcall;
+        function _Release: Integer; stdcall;
+    end;
+
+
+    TPYEKVSBranch=class(TPYEKVSObject)
     protected
         FStoreDocument: TPYEKVSDocument;               //Owner; hold the stream
         FStoreParent: TPYEKVSBranch;                   //Parent
 
-        FKey:  TPYEKVSKey;                            //Key (name) of the list
+        FKey:  TPYEKVSKey;                             //Key (name) of the list
         FSizeData: Int64;                              //calculated in WriteStreamBegin
         FState: TPYEKVSBranchState;
 
         FOnSetPutClosed: TPYEKVSMethod;
 
         function Encode():Integer; virtual;
-        function EncodeVT(const aValueType:TPYEKVSValueType):Integer;
-        function EncodeFundamental(const aValueType:TPYEKVSValueType):Integer;
-        function EncodeStringUTF8S():Integer;
-        function EncodeStringUTF8L():Integer;
-        function EncodeMemory():Integer;
+
         procedure SetPutValues(); virtual;
         procedure SetPutClosed(); virtual;
         procedure SizeChildBranch(const aSize:Int64);
         function  DetailsToStrings():string; virtual;
     public
+        //Convert a Value to the best mached pyeValueType
+        class function ValueTypeOf(const aValue:Boolean):TPYEKVSValueType; overload;
+        class function ValueTypeOf(const aValue:Integer):TPYEKVSValueType; overload;
+        class function ValueTypeTst(const aValue:Integer; const aVT:TPYEKVSValueType):Boolean; overload;
+        class function ValueTypeOf(const aValue:Int64):TPYEKVSValueType; overload;
+        class function ValueTypeTst(const aValue:Int64; const aVT:TPYEKVSValueType):Boolean; overload;
+        class function ValueTypeOf(const aValue:UInt64):TPYEKVSValueType; overload;
+        class function ValueTypeTst(const aValue:UInt64; const aVT:TPYEKVSValueType):Boolean; overload;
+        class function ValueTypeOf(const aValue:Cardinal):TPYEKVSValueType; overload;
+        class function ValueTypeTst(const aValue:Cardinal; const aVT:TPYEKVSValueType):Boolean; overload;
+        class function ValueTypeOf(const aValue:Single):TPYEKVSValueType; overload;
+        class function ValueTypeOf(const aValue:Double):TPYEKVSValueType; overload;
+        class function ValueTypeOf(const aValue:UTF8String):TPYEKVSValueType; overload;
+        class function ValueTypeTst(const aValue:UTF8String; const aVT:TPYEKVSValueType):Boolean; overload;
+
         constructor Create(const aStoreDocument:TPYEKVSDocument; const aStoreParent:TPYEKVSBranch; const aKey: TPYEKVSKey); virtual;
         destructor Destroy; override;
         procedure Clear(); virtual;
@@ -220,10 +260,11 @@ type
         property Key: TPYEKVSKey read FKey;
 
         property State: TPYEKVSBranchState read FState;
-        function KVSStream: TPYEKVSStream; inline;
 
         property OnSetPutClosed: TPYEKVSMethod read FOnSetPutClosed write FOnSetPutClosed;
     end;
+
+    RPYEKVSArray=class of TPYEKVSArray;
 
     TPYEKVSArray=class(TPYEKVSBranch)
     private
@@ -302,6 +343,8 @@ type
 
     TPYEKVSArrayMapValues = array of Variant;
 
+    RPYEKVSArrayMap=class of TPYEKVSArrayMap;
+
     TPYEKVSArrayMap=class(TPYEKVSBranch)
     private
         FPosSize: Int64;        //StreamPosition of Size-Value
@@ -379,6 +422,8 @@ type
     end;
 
 
+    RPYEKVSList=class of TPYEKVSList;
+
     TPYEKVSList=class(TPYEKVSBranch)
     private
         FKeys: TDictionary<TPYEKVSKey, Int64>;         //Key -> StreamPosition of FData (start with ValueType)
@@ -423,12 +468,14 @@ type
         function GetBool(const aKey:TPYEKVSKey; const aDefault:Boolean=false):Boolean;
 
         //Integer (Int8, Int16, Int32)
-        procedure PutInt(const aKey:TPYEKVSKey; const aValue:Integer; const aForceValueType:TPYEKVSValueType=pyeUnknown);
+        procedure PutInt(const aKey:TPYEKVSKey; const aValue:Integer);
+        procedure PutIntVT(const aKey:TPYEKVSKey; const aValue:Integer; const aForceValueType:TPYEKVSValueType);
         function GetInt(const aKey:TPYEKVSKey; const aDefault:Integer=0):Integer;
         procedure ChgInt(const aKey: TPYEKVSKey; const aValue:Integer);
 
         //Int64
-        procedure PutInt64(const aKey:TPYEKVSKey; const aValue:Int64; const aForceValueType:TPYEKVSValueType=pyeUnknown);
+        procedure PutInt64(const aKey:TPYEKVSKey; const aValue:Int64);
+        procedure PutInt64VT(const aKey:TPYEKVSKey; const aValue:Int64; const aForceValueType:TPYEKVSValueType);
         function GetInt64(const aKey:TPYEKVSKey; const aDefault:Int64=0):Int64;
         procedure ChgInt64(const aKey: TPYEKVSKey; const aValue:Int64);
 
@@ -437,12 +484,14 @@ type
         function GetInt128(const aKey:TPYEKVSKey; const aDefault:TPYEKVSInt128):TPYEKVSInt128;
 
         //UInt (UInt8, UInt16, UInt32)
-        procedure PutUInt(const aKey:TPYEKVSKey; const aValue:Cardinal; const aForceValueType:TPYEKVSValueType=pyeUnknown);
+        procedure PutUInt(const aKey:TPYEKVSKey; const aValue:Cardinal);
+        procedure PutUIntVT(const aKey:TPYEKVSKey; const aValue:Cardinal; const aForceValueType:TPYEKVSValueType);
         function GetUInt(const aKey:TPYEKVSKey; const aDefault:Cardinal=0):Cardinal;
         procedure ChgUInt(const aKey: TPYEKVSKey; const aValue:Cardinal);
 
         //UInt64
-        procedure PutUInt64(const aKey:TPYEKVSKey; const aValue:UInt64; const aForceValueType:TPYEKVSValueType=pyeUnknown);
+        procedure PutUInt64(const aKey:TPYEKVSKey; const aValue:UInt64);
+        procedure PutUInt64VT(const aKey:TPYEKVSKey; const aValue:UInt64; const aForceValueType:TPYEKVSValueType);
         function GetUInt64(const aKey:TPYEKVSKey; const aDefault:UInt64=0):UInt64;
         procedure ChgUInt64(const aKey: TPYEKVSKey; const aValue:UInt64);
 
@@ -459,11 +508,13 @@ type
         function GetDouble(const aKey:TPYEKVSKey; const aDefault:Double=0):Double;
 
         //String
-        procedure PutString(const aKey:TPYEKVSKey; const aValue:String; const aForceValueType:TPYEKVSValueType=pyeUnknown);
+        procedure PutString(const aKey:TPYEKVSKey; const aValue:String);
+        procedure PutStringVT(const aKey:TPYEKVSKey; const aValue:String; const aForceValueType:TPYEKVSValueType);
         function GetString(const aKey:TPYEKVSKey; const aDefault:String=''):String;
         procedure ChgString(const aKey: TPYEKVSKey; const aValue:String);
 
-        procedure PutUTF8String(const aKey:TPYEKVSKey; const aValue:UTF8String; const aForceValueType:TPYEKVSValueType=pyeUnknown);
+        procedure PutUTF8String(const aKey:TPYEKVSKey; const aValue:UTF8String);
+        procedure PutUTF8StringVT(const aKey:TPYEKVSKey; const aValue:UTF8String; const aForceValueType:TPYEKVSValueType);
         function GetUTF8String(const aKey:TPYEKVSKey; const aDefault:UTF8String=''):UTF8String;
         procedure ChgUTF8String(const aKey: TPYEKVSKey; const aValue:UTF8String);
 
@@ -493,10 +544,41 @@ type
     end;
 
 
-    //Stream of a pyeKVS document
-    TPYEKVSStream=class(TBytesStream)
+    //Default Stream class of a pyeKVS document; memory stream
+    TPYEKVSStreamDefault=TBytesStream;
+
+    //pyeKVS document is the master object
+    //- holder of the pyeKVS root list
+    //- holder of the pyeKVS stream (hold all values)
+    TPYEKVSDocument=class(TPYEKVSObject)
     private
+        RClassPYEKVSList: RPYEKVSList;                      //ClassReference of uses TPYEKVSList; possibility to use custom call
+        RClassPYEKVSArray: RPYEKVSArray;                    //ClassReference of uses TPYEKVSArray; possibility to use custom call
+        RClassPYEKVSArrayMap: RPYEKVSArrayMap;              //ClassReference of uses TPYEKVSArrayMap; possibility to use custom call
+
+        FRoot: TPYEKVSList;                                 //Root List
+
+        FFallbackEnabled: Boolean;
+        FFallbackList: TPYEKVSList;
+        FFallbackArray: TPYEKVSArray;
+        FFallbackArrayMap: TPYEKVSArrayMap;
+
+        FStream: TStream;                                   //Datastream; values with ValueType+Data
+        FStreamType:TPYEKVSStreamType;
+        FStreamOwns: Boolean;
+
+        FStreamHeader: TPYEKVSStreamHeader;
+
+        //PutBegin/End control
+        FPutCounter: Integer;
         FWriteBranch  :TPYEKVSBranch;
+
+        function FallbackList: TPYEKVSList;
+        function FallbackArray: TPYEKVSArray;
+        function FallbackArrayMap: TPYEKVSArrayMap;
+
+        procedure WriteDataHeader;
+        procedure WriteRoot;
 
         //Standard Write; Result=Bytes written
         function _WriteInt8(const aValue:Int8):Integer;
@@ -507,6 +589,9 @@ type
         function _WriteUInt32(const aValue:UInt32):Integer;
         function _WriteInt64(const aValue:Int64):Integer;
         function _WriteUInt64(const aValue:UInt64):Integer;
+        function _WriteInt128(const aValue:TPYEKVSInt128):Integer;
+        function _WriteUInt128(const aValue:TPYEKVSUInt128):Integer;
+
         function _WriteFloat32(const aValue:Single):Integer;
         function _WriteFloat64(const aValue:Double):Integer;
         function _WriteStringUTF8S(const aValue:UTF8String):Integer;
@@ -592,73 +677,93 @@ type
 
         //Read fundamental values given by aVT to a string
         function ReadToString(const aVT:TPYEKVSValueType):string;
-    public
-        //Convert a Value to the best mached pyeValueType
-        class function ValueTypeOf(const aValue:Boolean):TPYEKVSValueType; overload;
-        class function ValueTypeOf(const aValue:Integer):TPYEKVSValueType; overload;
-        class function ValueTypeTst(const aValue:Integer; const aVT:TPYEKVSValueType):Boolean; overload;
-        class function ValueTypeOf(const aValue:Int64):TPYEKVSValueType; overload;
-        class function ValueTypeTst(const aValue:Int64; const aVT:TPYEKVSValueType):Boolean; overload;
-        class function ValueTypeOf(const aValue:UInt64):TPYEKVSValueType; overload;
-        class function ValueTypeTst(const aValue:UInt64; const aVT:TPYEKVSValueType):Boolean; overload;
-        class function ValueTypeOf(const aValue:Cardinal):TPYEKVSValueType; overload;
-        class function ValueTypeTst(const aValue:Cardinal; const aVT:TPYEKVSValueType):Boolean; overload;
-        class function ValueTypeOf(const aValue:Single):TPYEKVSValueType; overload;
-        class function ValueTypeOf(const aValue:Double):TPYEKVSValueType; overload;
-        class function ValueTypeOf(const aValue:UTF8String):TPYEKVSValueType; overload;
-        class function ValueTypeTst(const aValue:UTF8String; const aVT:TPYEKVSValueType):Boolean; overload;
 
-        //clear the stream
-        procedure Clear;
+        function EncodeVT(const aValueType:TPYEKVSValueType):Integer;
+        function EncodeFundamental(const aValueType:TPYEKVSValueType):Integer;
+        function EncodeStringUTF8S():Integer;
+        function EncodeStringUTF8L():Integer;
+        function EncodeMemory():Integer;
+
+        function GetState: TPYEKVSBranchState;
+
+        function GetStreamPosition: Int64; inline;
+        procedure SetStreamPosition(const Value: Int64); inline;
+        function GetStreamSize: Int64;
+    protected
+        procedure CreateInternal(aClassPYEKVSList: RPYEKVSList; aClassPYEKVSArray: RPYEKVSArray; aClassPYEKVSArrayMap: RPYEKVSArrayMap); virtual;
+        procedure DoPutBegin(); virtual;
+        procedure DoPutEnd(); virtual;
+    public
+        ///pyeKVS document with memory stream class; read/write to memory
+        constructor Create(aClassPYEKVSList: RPYEKVSList=nil; aClassPYEKVSArray: RPYEKVSArray=nil; aClassPYEKVSArrayMap: RPYEKVSArrayMap=nil); overload;
+
+        ///pyeKVS document with file stream; direct read/write to file
+        constructor Create(const aFileName: string; aFileMode: Word; aFileRights: Cardinal=0; aClassPYEKVSList: RPYEKVSList=nil; aClassPYEKVSArray: RPYEKVSArray=nil; aClassPYEKVSArrayMap: RPYEKVSArrayMap=nil); overload;
+
+        ///pyeKVS document with forign user stream; direct read/write to aUserStream
+        constructor Create(const aUserStream:TStream; aOwnsStream:Boolean; aClassPYEKVSList: RPYEKVSList=nil; aClassPYEKVSArray: RPYEKVSArray=nil; aClassPYEKVSArrayMap: RPYEKVSArrayMap=nil); overload;
+
+        destructor Destroy; override;
+
+        procedure Clear(); virtual;
+        procedure Reset(); virtual;
+
+        //Output the values to aString; this will read the values from the stream
+        procedure ToStringsJSON(const aString: TStrings; const aIndenting: string); virtual;
+        procedure ToStringsSimple(const aString: TStrings; const aIndenting: string); virtual;
+
+        //Show the state of the root list
+        property State: TPYEKVSBranchState read GetState;
 
         //Control the writing of a branch
         procedure WriteBegin(const aNewWriteBranch:TPYEKVSBranch);
         procedure WriteEnd(const aNewWriteBranch:TPYEKVSBranch);
-    end;
-
-
-    //pyeKVS document is the master object
-    //- based on a pyeList (root list)
-    //- holder of the pyeKVS stream (hold all values)
-    TPYEKVSDocument=class(TPYEKVSList)
-    private
-        FKVSStream: TPYEKVSStream;                           //Datastream; values with ValueType+Data
-        FKVSStreamHeader: TPYEKVSStreamHeader;
-
-        FPutCounter: Integer;
-
-        procedure WriteDataHeader;
-        procedure WriteRoot;
-    protected
-        procedure DoPutBegin(); virtual;
-        procedure DoPutEnd(); virtual;
-    public
-        constructor Create; reintroduce; virtual;
-        destructor Destroy; override;
-        procedure Clear(); override;
-        procedure Reset();
 
         //Put values is only allowed between PutBegin und PutEnd calls
-        procedure PutBegin();
-        procedure PutEnd();
+        procedure PutBegin(); virtual;
+        procedure PutEnd(); virtual;
         property PutCounter: Integer read FPutCounter;
 
-        procedure ReadFromStream(const F: TStream);
-        procedure WriteToStream(const F: TStream);
+        //Read a stream and find values; call before Get-function
+        function Encode():Integer; virtual;
 
-        function Encode():Integer; override;
-
+        //Load the document from a file; this is a stream copy function
         procedure LoadFromFile(aFilename: string);
+        //Save the document to a file; this is a stream copy function
         procedure SaveToFile(aFilename: string);
 
-        procedure ToStringsJSON(const aString: TStrings; const aIndenting: string); reintroduce; virtual;
-        procedure ToStringsSimple(const aString: TStrings; const aIndenting: string); reintroduce; virtual;
+        //Load the document from the stream F; this is a stream copy function
+        procedure ReadFromStream(const F: TStream);
+        //Save the document to the stream F; this is a stream copy function
+        procedure WriteToStream(const F: TStream);
 
-      //function KVSStream access in base class TPYEKVSList!
-        property KVSStreamHeader:TPYEKVSStreamHeader read FKVSStreamHeader;
-        function KVSStreamHeaderUpdate:Boolean;
+        //Stream access; can be a MemoryStream, FileStream or UserStream
+        property Stream: TStream read FStream;
+        property StreamType: TPYEKVSStreamType read FStreamType;
+        property StreamOwns: Boolean read FStreamOwns;
 
+        //current size of the stream; after PutEnd functions
+        property StreamSize: Int64 read GetStreamSize;
+
+        //current stream position
+        property StreamPosition: Int64 read GetStreamPosition write SetStreamPosition;
+
+        //case reading FData from stream in blocks
+        //return the numbers of Bytes that still pending to read; size of next block
         function DataSizePending: Int64;
+
+        //access to the current StreamHeader; e.g. for TCP transmitions
+        property StreamHeader:TPYEKVSStreamHeader read FStreamHeader;
+
+        //check if a StreamHeader is valid by the version (true) or not (false); e.g. for TCP transmitions before access to StreamHeader.StreamSize
+        function StreamHeaderUpdate:Boolean;
+
+        //Root list; start of all Get functions
+        property Root: TPYEKVSList read FRoot;
+
+        //Control the result of GetList/Array/ArrayMap if key not exists; nil or Fallback object
+        property FallbackEnabled: Boolean read FFallbackEnabled write FFallbackEnabled;
+
     end;
 
 
@@ -751,56 +856,158 @@ var
     //stream value conversation to TPYEKVSValueType
     GValueTypeValue:array[TPYEKVSValueTypeSize] of TPYEKVSValueType;
 
+    //global english format settings; decimal separator="." for JSON compatibilty
     GFormatSettingsFloat: TFormatSettings;
-
 
 
 { TPYEKVSDocument }
 
-constructor TPYEKVSDocument.Create;
+constructor TPYEKVSDocument.Create(aClassPYEKVSList: RPYEKVSList; aClassPYEKVSArray: RPYEKVSArray; aClassPYEKVSArrayMap: RPYEKVSArrayMap);
 begin
-    inherited Create(self, nil, '');
-    FKVSStream:=TPYEKVSStream.Create();
+    inherited Create;
+
+    FStreamType:=pyeStreamMemory;
+    FStreamOwns:=true;      //TPYEKVSDocument controls the free
+    FStream:=TPYEKVSStreamDefault.Create();
+
+    CreateInternal(aClassPYEKVSList, aClassPYEKVSArray, aClassPYEKVSArrayMap);
+end;
+
+///pyeKVS document with file stream; direct read/write to file
+constructor TPYEKVSDocument.Create(const aFileName: string; aFileMode: Word; aFileRights: Cardinal=0; aClassPYEKVSList: RPYEKVSList=nil; aClassPYEKVSArray: RPYEKVSArray=nil; aClassPYEKVSArrayMap: RPYEKVSArrayMap=nil);
+begin
+    inherited Create;
+
+    FStreamType:=pyeStreamFile;
+    FStreamOwns:=true;      //TPYEKVSDocument controls the free
+    FStream:=TFileStream.Create(aFileName, aFileMode, aFileRights);
+
+    CreateInternal(aClassPYEKVSList, aClassPYEKVSArray, aClassPYEKVSArrayMap);
+end;
+
+
+constructor TPYEKVSDocument.Create(const aUserStream:TStream; aOwnsStream:Boolean; aClassPYEKVSList: RPYEKVSList=nil; aClassPYEKVSArray: RPYEKVSArray=nil; aClassPYEKVSArrayMap: RPYEKVSArrayMap=nil);
+begin
+    inherited Create;
+
+    FStreamType:=pyeStreamUser;
+    FStreamOwns:=aOwnsStream;      //TPYEKVSDocument controls the free
+
+    FStream:=aUserStream;
+
+    CreateInternal(aClassPYEKVSList, aClassPYEKVSArray, aClassPYEKVSArrayMap);
+end;
+
+
+procedure TPYEKVSDocument.CreateInternal(aClassPYEKVSList: RPYEKVSList; aClassPYEKVSArray: RPYEKVSArray; aClassPYEKVSArrayMap: RPYEKVSArrayMap);
+begin
+    //Set default pyeKVS ClassReferences
+    RClassPYEKVSList:=TPYEKVSList;
+    RClassPYEKVSArray:=TPYEKVSArray;
+    RClassPYEKVSArrayMap:=TPYEKVSArrayMap;
+
+    //User define container classes (overide e.g. for interface usage)
+    if (aClassPYEKVSList<>nil) then
+        RClassPYEKVSList:=aClassPYEKVSList;
+    if (aClassPYEKVSArray<>nil) then
+        RClassPYEKVSArray:=aClassPYEKVSArray;
+    if (aClassPYEKVSArrayMap<>nil) then
+        RClassPYEKVSArrayMap:=aClassPYEKVSArrayMap;
+
+    //Create root
+    FRoot:=RClassPYEKVSList.Create(self, nil, '');
+
+    FFallbackList:=nil;
+    FFallbackArray:=nil;
+    FFallbackArrayMap:=nil;
 
     //Default header
-    FKVSStreamHeader.StreamPrefix:=cPYEKVSStreamPrefix;
-    FKVSStreamHeader.StreamVersionH:=PYEKVSVersionH;
-    FKVSStreamHeader.StreamVersionL:=PYEKVSVersionL;
-    FKVSStreamHeader.StreamSize:=0;
+    FStreamHeader.StreamPrefix:=cPYEKVSStreamPrefix;
+    FStreamHeader.StreamVersionH:=PYEKVSVersionH;
+    FStreamHeader.StreamVersionL:=PYEKVSVersionL;
+    FStreamHeader.StreamSize:=0;
 end;
 
 destructor TPYEKVSDocument.Destroy;
 begin
-    FKVSStream.Free();
+    if (FStreamOwns) then
+        FStream.Free();
+
+    FRoot.Free();
+
+    if (FFallbackList<>nil) then
+        FFallbackList:=nil;
+    if (FFallbackArray<>nil) then
+        FFallbackArray:=nil;
+    if (FFallbackArrayMap<>nil) then
+        FFallbackArrayMap:=nil;
+
     inherited;
 end;
 
+
+function TPYEKVSDocument.FallbackList: TPYEKVSList;
+begin
+    if (FFallbackEnabled) then begin
+        if (FFallbackList=nil) then
+            FFallbackList:=RClassPYEKVSList.Create(self, nil, '');
+        result:=FFallbackList;
+    end else exit(nil);
+end;
+function TPYEKVSDocument.FallbackArray: TPYEKVSArray;
+begin
+    if (FFallbackEnabled) then begin
+        if (FFallbackArray=nil) then
+            FFallbackArray:=RClassPYEKVSArray.Create(self, nil, '');
+        result:=FFallbackArray;
+    end else exit(nil);
+end;
+function TPYEKVSDocument.FallbackArrayMap: TPYEKVSArrayMap;
+begin
+    if (FFallbackEnabled) then begin
+        if (FFallbackArrayMap=nil) then
+            FFallbackArrayMap:=RClassPYEKVSArrayMap.Create(self, nil, '');
+        result:=FFallbackArrayMap;
+    end else exit(nil);
+end;
+
+
 procedure TPYEKVSDocument.Clear;
 begin
-    inherited Clear();
-    FKVSStream.Clear();
+    FRoot.Clear();
+
+    if (FStream is TMemoryStream) then begin
+        TMemoryStream(FStream).Clear();
+    end else begin
+        FStream.Position:=0;
+        FStream.Size:=0;
+    end;
+
+    FWriteBranch:=nil;
 end;
+
 
 procedure TPYEKVSDocument.WriteRoot;
 begin
     WriteDataHeader();
 
-    FKVSStream.WriteKey(self, '');   //no root key name
-    WriteHeader();
+    WriteKey(FRoot, '');   //no root key name
+
+    FRoot.WriteHeader();
 end;
 
 procedure TPYEKVSDocument.WriteDataHeader;
 begin
-    if (FKVSStream.Size>sizeof(TPYEKVSStreamHeader)) then
-        FKVSStreamHeader.StreamSize:=FKVSStream.Size - sizeof(TPYEKVSStreamHeader)
+    if (FStream.Size>sizeof(TPYEKVSStreamHeader)) then
+        FStreamHeader.StreamSize:=FStream.Size - sizeof(TPYEKVSStreamHeader)
     else
-        FKVSStreamHeader.StreamSize:=0;
+        FStreamHeader.StreamSize:=0;
 
-    FKVSStream.Position:=0;
-    FKVSStream.Write(FKVSStreamHeader, sizeof(FKVSStreamHeader));
+    FStream.Position:=0;
+    FStream.Write(FStreamHeader, sizeof(FStreamHeader));
 
     //Go back to end
-    FKVSStream.Seek(0, soEnd);
+    FStream.Seek(0, soEnd);
 end;
 
 procedure TPYEKVSDocument.PutBegin;
@@ -821,26 +1028,24 @@ end;
 
 procedure TPYEKVSDocument.DoPutBegin;
 begin
-    inherited SetPutValues();
+    FRoot.SetPutValues();
     WriteRoot();
 end;
 
 procedure TPYEKVSDocument.DoPutEnd;
 begin
     //close all write branches
-    FKVSStream.WriteEnd(nil);
+    WriteEnd(nil);
 
     //Update size in header
     WriteDataHeader();
 end;
 
-
-
 procedure TPYEKVSDocument.LoadFromFile(aFilename: string);
 var
     F: TFileStream;
 begin
-    F:=TFileStream.Create(aFilename, fmOpenRead);
+    F:=TFileStream.Create(aFilename, fmOpenRead or fmShareDenyWrite);
     try
         ReadFromStream(F);
     finally
@@ -859,10 +1064,68 @@ begin
     end;
 end;
 
+procedure TPYEKVSDocument.ReadFromStream(const F: TStream);
+begin
+    Reset();
+
+    //Load FData from stream F
+    FStream.Size:=F.Size;
+
+    if (FStream is TCustomMemoryStream) then begin
+        //Write memory direct to F
+        F.ReadBuffer(TCustomMemoryStream(FStream).Memory^, FStream.Size);
+    end else begin
+        //Use stream copy function
+        FStream.CopyFrom(F, FStream.Size);
+    end;
+
+    //Encode keys and values
+    Encode();
+end;
+
+procedure TPYEKVSDocument.WriteToStream(const F: TStream);
+begin
+    if (FRoot.State in [srzstate_PutValues]) then
+        raise EPYEKVSException.Create('put values incomplete');
+    try
+        FStream.Position:=0;
+        if (FStream is TCustomMemoryStream) then begin
+            //Write memory direct to F
+            F.WriteBuffer(TCustomMemoryStream(FStream).Memory^, FStream.Size);
+        end else begin
+            //Use stream copy function
+            F.CopyFrom(FStream, FStream.Size);
+        end;
+    finally
+    end;
+end;
+
+
+
+function TPYEKVSDocument.GetState: TPYEKVSBranchState;
+begin
+    result:=FRoot.State;
+end;
+
+function TPYEKVSDocument.GetStreamPosition: Int64;
+begin
+    result:=FStream.Position;
+end;
+
+function TPYEKVSDocument.GetStreamSize: Int64;
+begin
+    result:=FStream.Size;
+end;
+
+procedure TPYEKVSDocument.SetStreamPosition(const Value: Int64);
+begin
+    FStream.Position:=Value;
+end;
+
 procedure TPYEKVSDocument.ToStringsJSON(const aString: TStrings; const aIndenting: string);
 begin
     aString.Add(Str_PYEKVSListSeperatorO);
-    inherited ToStringsJSON(aString, aIndenting, '', true);
+    FRoot.ToStringsJSON(aString, aIndenting, '', true);
     aString.Add(Str_PYEKVSListSeperatorC);
 end;
 
@@ -870,25 +1133,9 @@ end;
 procedure TPYEKVSDocument.ToStringsSimple(const aString: TStrings; const aIndenting: string);
 begin
     aString.Add(Str_PYEKVSListSeperatorO);
-    inherited ToStringsSimple(aString, aIndenting, '');
+    FRoot.ToStringsSimple(aString, aIndenting, '');
     aString.Add(Str_PYEKVSListSeperatorC);
 end;
-
-procedure TPYEKVSDocument.ReadFromStream(const F: TStream);
-begin
-    Reset();
-
-    //Load FData from stream F
-    FKVSStream.Size:=F.Size;
-    F.Read(FKVSStream.Bytes[0], FKVSStream.Size);
-
-    //Encode keys and values
-    Encode();
-
-    if (FKVSStream.Position<FKVSStream.Size) then
-        raise EPYEKVSException.Create('ReadStream incomplete');
-end;
-
 
 procedure TPYEKVSDocument.Reset;
 begin
@@ -896,36 +1143,27 @@ begin
     Clear();
 end;
 
-procedure TPYEKVSDocument.WriteToStream(const F: TStream);
-begin
-    if (State<>srzstate_Closed) then raise EPYEKVSException.Create('put values incomplete');
-    try
-        FKVSStream.Position:=0;
-        F.Write(FKVSStream.Bytes, FKVSStream.Size);
-    finally
-    end;
-end;
 
-function TPYEKVSDocument.KVSStreamHeaderUpdate:Boolean;
+function TPYEKVSDocument.StreamHeaderUpdate:Boolean;
 begin
     //result=true if DataHeader is valid
     result:=true;
 
     //encode data header
-    FKVSStream.Position:=0;
-    FKVSStream.Read(FKVSStreamHeader, sizeof(FKVSStreamHeader));
+    FStream.Position:=0;
+    FStream.Read(FStreamHeader, sizeof(FStreamHeader));
 
-    if (FKVSStreamHeader.StreamPrefix<>cPYEKVSStreamPrefix) then exit(false);
+    if (FStreamHeader.StreamPrefix<>cPYEKVSStreamPrefix) then exit(false);
 
-    if (FKVSStreamHeader.StreamVersionH>PYEKVSVersionH)OR
-       (FKVSStreamHeader.StreamVersionH=PYEKVSVersionH)AND(FKVSStreamHeader.StreamVersionL>PYEKVSVersionL) then exit(false);
+    if (FStreamHeader.StreamVersionH>PYEKVSVersionH)OR
+       (FStreamHeader.StreamVersionH=PYEKVSVersionH)AND(FStreamHeader.StreamVersionL>PYEKVSVersionL) then exit(false);
 end;
 
 function TPYEKVSDocument.DataSizePending: Int64;
 begin
     //case reading FData from stream in blocks
     //return the numbers of Bytes that still pending to read; size of next block
-    result:=sizeof(TPYEKVSStreamHeader) + FKVSStreamHeader.StreamSize - FKVSStream.Size;
+    result:=sizeof(TPYEKVSStreamHeader) + FStreamHeader.StreamSize - FStream.Size;
 end;
 
 
@@ -933,30 +1171,217 @@ function TPYEKVSDocument.Encode():Integer;
 var iVT:TPYEKVSValueType;
 begin
     //Encode keys and values after ReadFromStoreList
+    //Result is the number of bytes
 
-    FKVSStream.Position:=0;
+    if (FStream.Size<sizeof(FStreamHeader)) then
+        raise EPYEKVSException.Create('Stream is empty');
+
+    FStream.Position:=0;
     result:=0;
 
     //data header
-    result:=result+FKVSStream.Read(FKVSStreamHeader, sizeof(FKVSStreamHeader));
+    result:=result+FStream.Read(FStreamHeader, sizeof(FStreamHeader));
 
     //check DataHeader
-    if (FKVSStreamHeader.StreamPrefix<>cPYEKVSStreamPrefix) then raise EPYEKVSException.Create('Store header prefix error.');
-    if (FKVSStreamHeader.StreamVersionH>PYEKVSVersionH)OR
-       (FKVSStreamHeader.StreamVersionH=PYEKVSVersionH)AND(FKVSStreamHeader.StreamVersionL>PYEKVSVersionL) then
-        raise EPYEKVSException.CreateFmt('Store protocol version error.'#10#13'Version in stream: %d.%d'#10#13'Version API: V%d.%d'#10#13,[FKVSStreamHeader.StreamVersionH,FKVSStreamHeader.StreamVersionL, PYEKVSVersionH,PYEKVSVersionL]);
-    if (FKVSStreamHeader.StreamSize<>FKVSStream.Size-sizeof(TPYEKVSStreamHeader)) then raise EPYEKVSException.Create('Store size error.');
+    if (FStreamHeader.StreamPrefix<>cPYEKVSStreamPrefix) then raise EPYEKVSException.Create('Store header prefix error');
+    if (FStreamHeader.StreamVersionH>PYEKVSVersionH)OR
+       (FStreamHeader.StreamVersionH=PYEKVSVersionH)AND(FStreamHeader.StreamVersionL>PYEKVSVersionL) then
+        raise EPYEKVSException.CreateFmt('Store protocol version error.'#10#13'Version in stream: %d.%d'#10#13'Version API: V%d.%d'#10#13,[FStreamHeader.StreamVersionH,FStreamHeader.StreamVersionL, PYEKVSVersionH,PYEKVSVersionL]);
+    if (FStreamHeader.StreamSize<>FStream.Size-sizeof(TPYEKVSStreamHeader)) then
+        raise EPYEKVSException.Create('Store size error');
 
     //root header
-    result:=result+FKVSStream.ReadKey(FKey);
-    result:=result+FKVSStream.ReadValueType(iVT);
-    if (iVT<>pyeList) then raise EPYEKVSException.Create('root list failed');
+    result:=result+ReadKey(FRoot.FKey);
+    result:=result+ReadValueType(iVT);
+    if (iVT<>pyeList) then
+        raise EPYEKVSException.Create('root list failed');
 
-    result:=result+inherited Encode();
+    result:=result+FRoot.Encode();
+
+    if (result<>FStream.Size) then
+        raise EPYEKVSException.Create('ReadStream incomplete');
+end;
+
+
+
+{ TPYEKVSObject }
+
+function TPYEKVSObject._AddRef: Integer;
+begin
+    result:=-1;
+end;
+
+function TPYEKVSObject._Release: Integer;
+begin
+    result:=-1;
+end;
+
+function TPYEKVSObject.QueryInterface(const IID: TGUID; out Obj): HResult;
+const E_NOINTERFACE=HResult($80004002);
+begin
+    if GetInterface(IID, Obj) then result:=0
+    else result:=E_NOINTERFACE;
 end;
 
 
 { TPYEKVSBranch }
+
+
+
+class function TPYEKVSBranch.ValueTypeOf(const aValue:Boolean):TPYEKVSValueType;
+begin
+    //return the pyeValueType to store aValue
+    if (aValue=false) then result:=pyeZero
+    else result:=pyeBool;
+end;
+
+class function TPYEKVSBranch.ValueTypeOf(const aValue:Integer):TPYEKVSValueType;
+begin
+    //return the pyeValueType to store aValue
+    if (aValue=0) then result:=pyeZero
+    else if (aValue=1) then result:=pyeBool
+    else if (AValue>=Low(Int8))AND(AValue<=High(Int8)) then result:=pyeInt8
+    else if (AValue>=Low(UInt8))AND(aValue<=High(UInt8)) then result:=pyeUInt8
+    else if (AValue>=Low(Int16))AND(AValue<=High(Int16)) then result:=pyeInt16
+    else if (AValue>=Low(UInt16))AND(aValue<=High(UInt16)) then result:=pyeUInt16
+    else result:=pyeInt32;
+end;
+
+class function TPYEKVSBranch.ValueTypeTst(const aValue:Integer; const aVT:TPYEKVSValueType):Boolean;
+begin
+    //Test if aValue can be coded as aVT
+    case aVT of
+    pyeZero: result:=(aValue=0);
+    pyeBool: result:=(aValue=1);
+    pyeInt8: result:=(AValue>=Low(Int8))AND(AValue<=High(Int8));
+    pyeUInt8: result:=(AValue>=Low(UInt8))AND(aValue<=High(UInt8));
+    pyeInt16: result:=(AValue>=Low(Int16))AND(AValue<=High(Int16));
+    pyeUInt16: result:=(AValue>=Low(UInt16))AND(aValue<=High(UInt16));
+    pyeInt32: result:=true;
+    else result:=false;
+    end;
+end;
+
+class function TPYEKVSBranch.ValueTypeOf(const aValue:Int64):TPYEKVSValueType;
+begin
+    //return the pyeValueType to store aValue
+    if (aValue=0) then result:=pyeZero
+    else if (aValue=1) then result:=pyeBool
+    else if (AValue>=Low(Int8))AND(AValue<=High(Int8)) then result:=pyeInt8
+    else if (AValue>=Low(UInt8))AND(aValue<=High(UInt8)) then result:=pyeUInt8
+    else if (AValue>=Low(Int16))AND(AValue<=High(Int16)) then result:=pyeInt16
+    else if (AValue>=Low(UInt16))AND(aValue<=High(UInt16)) then result:=pyeUInt16
+    else if (AValue>=Low(Int32))AND(AValue<=High(Int32)) then result:=pyeInt32
+    else if (AValue>=Low(UInt32))AND(AValue<=High(UInt32)) then result:=pyeUInt32
+    else result:=pyeInt64;
+end;
+
+class function TPYEKVSBranch.ValueTypeTst(const aValue:Int64; const aVT:TPYEKVSValueType):Boolean;
+begin
+    //Test if aValue can be coded as aVT
+    case aVT of
+    pyeZero: result:=(aValue=0);
+    pyeBool: result:=(aValue=1);
+    pyeInt8: result:=(AValue>=Low(Int8))AND(AValue<=High(Int8));
+    pyeUInt8: result:=(AValue>=Low(UInt8))AND(aValue<=High(UInt8));
+    pyeInt16: result:=(AValue>=Low(Int16))AND(AValue<=High(Int16));
+    pyeUInt16: result:=(AValue>=Low(UInt16))AND(aValue<=High(UInt16));
+    pyeInt32: result:=(AValue>=Low(UInt32))AND(AValue<=High(UInt32));
+    pyeInt64: result:=true;
+    else result:=false;
+    end;
+end;
+
+class function TPYEKVSBranch.ValueTypeOf(const aValue:Cardinal):TPYEKVSValueType;
+begin
+    //return the pyeValueType to store aValue
+    if (aValue=0) then result:=pyeZero
+    else if (aValue=1) then result:=pyeBool
+    else if (aValue<=High(UInt8)) then result:=pyeUInt8
+    else if (aValue<=High(UInt16)) then result:=pyeUInt16
+    else result:=pyeUInt32;
+end;
+
+class function TPYEKVSBranch.ValueTypeTst(const aValue:Cardinal; const aVT:TPYEKVSValueType):Boolean;
+begin
+    //Test if aValue can be coded as aVT
+    case aVT of
+    pyeZero: result:=(aValue=0);
+    pyeBool: result:=(aValue=1);
+    pyeUInt8: result:=(aValue<=High(UInt8));
+    pyeUInt16: result:=(aValue<=High(UInt16));
+    pyeUInt32: result:=true;
+    else result:=false;
+    end;
+end;
+
+class function TPYEKVSBranch.ValueTypeOf(const aValue:UInt64):TPYEKVSValueType;
+begin
+    //return the pyeValueType to store aValue
+    if (aValue=0) then result:=pyeZero
+    else if (aValue=1) then result:=pyeBool
+    else if (aValue<=High(UInt8)) then result:=pyeUInt8
+    else if (aValue<=High(UInt16)) then result:=pyeUInt16
+    else if (aValue<=High(UInt32)) then result:=pyeUInt32
+    else result:=pyeUInt64;
+end;
+
+class function TPYEKVSBranch.ValueTypeTst(const aValue:UInt64; const aVT:TPYEKVSValueType):Boolean;
+begin
+    //Test if aValue can be coded as aVT
+    case aVT of
+    pyeZero: result:=(aValue=0);
+    pyeBool: result:=(aValue=1);
+    pyeUInt8: result:=(aValue<=High(UInt8));
+    pyeUInt16: result:=(aValue<=High(UInt16));
+    pyeUInt32: result:=(aValue<=High(UInt32));
+    pyeUInt64: result:=true;
+    else result:=false;
+    end;
+end;
+
+class function TPYEKVSBranch.ValueTypeOf(const aValue:Single):TPYEKVSValueType;
+begin
+    //return the pyeValueType to store aValue
+    if IsZero(aValue) then result:=pyeZero
+    else result:=pyeFloat32;
+end;
+
+class function TPYEKVSBranch.ValueTypeOf(const aValue:Double):TPYEKVSValueType;
+var S:Single;
+begin
+    //return the pyeValueType to store aValue
+    if IsZero(aValue) then result:=pyeZero
+    else begin
+        S:=aValue;
+        if (IsZero(aValue-S)) then result:=pyeFloat32
+        else result:=pyeFloat64;
+    end;
+end;
+
+class function TPYEKVSBranch.ValueTypeOf(const aValue:UTF8String):TPYEKVSValueType;
+var Len:Integer;
+begin
+    //return the pyeValueType to store aValue
+    Len:=Length(aValue);
+    if Len=0 then result:=pyeZero
+    else if (Len<=High(UInt8)) then result:=pyeStringUTF8S
+    else result:=pyeStringUTF8L;
+end;
+
+class function TPYEKVSBranch.ValueTypeTst(const aValue:UTF8String; const aVT:TPYEKVSValueType):Boolean;
+var Len:Integer;
+begin
+    //Test if aValue can be coded as aVT
+    Len:=Length(aValue);
+    case aVT of
+    pyeZero: result:=(Len=0);
+    pyeStringUTF8S: result:=(Len<=High(UInt8));
+    pyeStringUTF8L: result:=true;
+    else result:=false;
+    end;
+end;
+
 
 constructor TPYEKVSBranch.Create(const aStoreDocument:TPYEKVSDocument; const aStoreParent:TPYEKVSBranch; const aKey: TPYEKVSKey);
 begin
@@ -976,69 +1401,10 @@ begin
     FSizeData:=0;
 end;
 
-function TPYEKVSBranch.KVSStream: TPYEKVSStream;
-begin
-    result:=FStoreDocument.FKVSStream;
-end;
-
 function TPYEKVSBranch.Encode():Integer;
 begin
     result:=0;
     FState:=srzstate_Closed;
-end;
-
-
-function TPYEKVSBranch.EncodeVT(const aValueType:TPYEKVSValueType):Integer;
-begin
-    case aValueType of
-    pyeStringUTF8S: result:=EncodeStringUTF8S();
-    pyeStringUTF8L: result:=EncodeStringUTF8L();
-    pyeMemory: result:=EncodeMemory();
-    else result:=EncodeFundamental(aValueType);
-    end;
-end;
-
-function TPYEKVSBranch.EncodeFundamental(const aValueType:TPYEKVSValueType):Integer;
-begin
-    result:=cPYEKVSValueTypeSize[aValueType];
-    //skip value bytes
-    KVSStream.Position:=KVSStream.Position+result;
-end;
-
-function TPYEKVSBranch.EncodeStringUTF8S():Integer;
-var uLen   : UInt8;
-begin
-    //UTF8 head
-    result:=KVSStream.ReadFixUInt8(uLen);
-    if (uLen>0) then begin
-        //skip UTF8 chars
-        result:=result+Integer(uLen);
-        KVSStream.Position:=KVSStream.Position+uLen;
-    end;
-end;
-
-function TPYEKVSBranch.EncodeStringUTF8L():Integer;
-var uLen   : UInt32;
-begin
-    //UTF8 head
-    result:=KVSStream.ReadFixUInt32(uLen);
-    if (uLen>0) then begin
-        //skip UTF8 chars
-        result:=result+Integer(uLen);
-        KVSStream.Position:=KVSStream.Position+uLen;
-    end;
-end;
-
-function TPYEKVSBranch.EncodeMemory():Integer;
-var uSize: UInt32;
-begin
-    //Memory head
-    result:=KVSStream.ReadFixUInt32(uSize);
-    if (uSize>0) then begin
-        //skip memory bytes
-        result:=result+Integer(uSize);
-        KVSStream.Position:=KVSStream.Position+uSize;
-    end;
 end;
 
 
@@ -1123,29 +1489,30 @@ begin
 
     //Values ...
     //size
-    result:=result+KVSStream.ReadFixUInt32(uSize);
+    result:=result+FStoreDocument.ReadFixUInt32(uSize);
     iSize:=uSize;
 
     //count
-    result:=result+KVSStream.ReadFixUInt32(uCount);
+    result:=result+FStoreDocument.ReadFixUInt32(uCount);
     iCount:=uCount;
 
     result:=result+iSize;
 
     while (iSize>0) do begin
 
-        iSize:=iSize-KVSStream.ReadKey(iKey);
+        iSize:=iSize-FStoreDocument.ReadKey(iKey);
 
-        iPos:=KVSStream.Position;
-        iSize:=iSize-KVSStream.ReadValueType(iVT);
-        if iVT=pyeUnknown then raise EPYEKVSException.Create('read unknown data type');
+        iPos:=FStoreDocument.StreamPosition;
+        iSize:=iSize-FStoreDocument.ReadValueType(iVT);
+        if iVT=pyeUnknown then
+            raise EPYEKVSException.Create('read unknown data type');
 
         // register Key and FData stream position
         FKeys.Add(iKey, iPos);
 
         case iVT of
         pyeList: begin
-            iList:=TPYEKVSList.Create(FStoreDocument, self, iKey);
+            iList:=FStoreDocument.RClassPYEKVSList.Create(FStoreDocument, self, iKey);
 
             // register list at FData stream position
             FList.Add(iPos, iList);
@@ -1154,7 +1521,7 @@ begin
             iSize:=iSize-iList.Encode();
         end;
         pyeArray: begin
-            iArray:=TPYEKVSArray.Create(FStoreDocument, self, iKey);
+            iArray:=FStoreDocument.RClassPYEKVSArray.Create(FStoreDocument, self, iKey);
 
             // register list at FData stream position
             FList.Add(iPos, iArray);
@@ -1163,7 +1530,7 @@ begin
             iSize:=iSize-iArray.Encode();
         end;
         pyeArrayMap: begin
-            iArrayMap:=TPYEKVSArrayMap.Create(FStoreDocument, self, iKey);
+            iArrayMap:=FStoreDocument.RClassPYEKVSArrayMap.Create(FStoreDocument, self, iKey);
 
             // register list at FData stream position
             FList.Add(iPos, iArrayMap);
@@ -1176,7 +1543,7 @@ begin
             //pyeStringUTF8S
             //pyeStringUTF8L
             //pyeMemory
-            iSize:=iSize-EncodeVT(iVT);
+            iSize:=iSize-FStoreDocument.EncodeVT(iVT);
         end;
         end;
 
@@ -1191,22 +1558,22 @@ end;
 function TPYEKVSList.WriteHeader():Integer;
 begin
     //write list Header to Data
-    result:=KVSStream.WriteValueType(pyeList);
-    KVSStream.WriteBranchSet(self);     //change to new branch
+    result:=FStoreDocument.WriteValueType(pyeList);
+    FStoreDocument.WriteBranchSet(self);     //change to new branch
 
-    FPosSize:=KVSStream.Position;
-    result:=result+KVSStream.WriteFixUInt32(0);           //Placeholder of Size-Value
+    FPosSize:=FStoreDocument.StreamPosition;
+    result:=result+FStoreDocument.WriteFixUInt32(0);           //Placeholder of Size-Value
 
-    FPosCount:=KVSStream.Position;
-    result:=result+KVSStream.WriteFixUInt32(0);           //Placeholder of Count-Value
+    FPosCount:=FStoreDocument.StreamPosition;
+    result:=result+FStoreDocument.WriteFixUInt32(0);           //Placeholder of Count-Value
 end;
 
 procedure TPYEKVSList.SetPutClosed();
 begin
     //Update SizeData
-    KVSStream.WriteFixUInt32(FSizeData, FPosSize);
+    FStoreDocument.WriteFixUInt32(FSizeData, FPosSize);
     //Update Count
-    KVSStream.WriteFixUInt32(FKeys.Count, FPosCount);
+    FStoreDocument.WriteFixUInt32(FKeys.Count, FPosCount);
 
     inherited SetPutClosed;
 end;
@@ -1238,8 +1605,8 @@ begin
         iKey:=iKeyArray[i];
         iValue:=FKeys.Items[iKeyArray[i]];
 
-        KVSStream.Position:=iValue;
-        KVSStream.ReadValueType(iVT);
+        FStoreDocument.StreamPosition:=iValue;
+        FStoreDocument.ReadValueType(iVT);
 
         s:=sIndenting;
 
@@ -1265,7 +1632,7 @@ begin
         end;
         else begin
             //fundamental values
-            s:=s+KVSStream.ReadToString(iVT);
+            s:=s+FStoreDocument.ReadToString(iVT);
         end;
         end;
 
@@ -1301,8 +1668,8 @@ begin
         iKey:=iKeyArray[i];
         iValue:=FKeys.Items[iKeyArray[i]];
 
-        KVSStream.Position:=iValue;
-        KVSStream.ReadValueType(iVT);
+        FStoreDocument.StreamPosition:=iValue;
+        FStoreDocument.ReadValueType(iVT);
 
         s:=sIndenting+string(iKey)+Str_PYEKVSSpace+Str_PYEKVSTypeSeperatorO+cPYEKVSValueTypeName[iVT];
 
@@ -1325,7 +1692,7 @@ begin
         end;
         else begin
             //fundamental values
-            s:=s+Str_PYEKVSTypeSeperatorC+Str_PYEKVSSpace+Str_PYEKVSValueSeperator+Str_PYEKVSSpace+KVSStream.ReadToString(iVT);
+            s:=s+Str_PYEKVSTypeSeperatorC+Str_PYEKVSSpace+Str_PYEKVSValueSeperator+Str_PYEKVSSpace+FStoreDocument.ReadToString(iVT);
         end;
 
         end;
@@ -1352,8 +1719,8 @@ function TPYEKVSList.GetKey(const aKey:TPYEKVSKey):TPYEKVSValueType;
 var iPos:Int64;
 begin
     if FKeys.TryGetValue(aKey, iPos) then begin
-        KVSStream.Position:=iPos;
-        KVSStream.ReadValueType(result);
+        FStoreDocument.StreamPosition:=iPos;
+        FStoreDocument.ReadValueType(result);
     end else begin
         result:=pyeUnknown;
     end;
@@ -1367,9 +1734,9 @@ end;
 
 procedure TPYEKVSList.PutZero(const aKey: TPYEKVSKey);
 begin
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
-    FSizeData:=FSizeData+KVSStream.WriteValueType(pyeZero);
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
+    FSizeData:=FSizeData+FStoreDocument.WriteValueType(pyeZero);
 end;
 
 function TPYEKVSList.GetZero(const aKey:TPYEKVSKey):Boolean;
@@ -1385,41 +1752,46 @@ end;
 procedure TPYEKVSList.PutBool(const aKey: TPYEKVSKey; const aValue: Boolean);
 var iVT:TPYEKVSValueType;
 begin
-    iVT:=KVSStream.ValueTypeOf(aValue);
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
-    FSizeData:=FSizeData+KVSStream.WriteValueType(iVT);
+    iVT:=ValueTypeOf(aValue);
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
+    FSizeData:=FSizeData+FStoreDocument.WriteValueType(iVT);
 end;
 
 function TPYEKVSList.GetBool(const aKey:TPYEKVSKey; const aDefault:Boolean):Boolean;
 var iVT:TPYEKVSValueType;
 begin
     iVT:=GetKey(aKey);
-    KVSStream.ReadVTBool(result, iVT, aDefault);
+    FStoreDocument.ReadVTBool(result, iVT, aDefault);
 end;
 
 
-procedure TPYEKVSList.PutInt(const aKey: TPYEKVSKey; const aValue: Integer; const aForceValueType:TPYEKVSValueType=pyeUnknown);
+procedure TPYEKVSList.PutInt(const aKey: TPYEKVSKey; const aValue: Integer);
+begin
+    PutIntVT(aKey, aValue, pyeUnknown);
+end;
+
+procedure TPYEKVSList.PutIntVT(const aKey: TPYEKVSKey; const aValue: Integer; const aForceValueType:TPYEKVSValueType);
 var iVT:TPYEKVSValueType;
 begin
     if (aForceValueType=pyeUnknown) then begin
-        iVT:=KVSStream.ValueTypeOf(aValue);
+        iVT:=ValueTypeOf(aValue);
     end else begin
         //Try to use aForceValueType; maybe aValue should be Int32 (4Bytes) to make later the call "ChgInt" with a higher aValue
         iVT:=aForceValueType;
-        if (KVSStream.ValueTypeTst(aValue, iVT)=false) then raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
+        if (ValueTypeTst(aValue, iVT)=false) then raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
     end;
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
-    FSizeData:=FSizeData+KVSStream.WriteValueType(iVT);
-    FSizeData:=FSizeData+KVSStream.WriteVTInt(aValue, iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
+    FSizeData:=FSizeData+FStoreDocument.WriteValueType(iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTInt(aValue, iVT);
 end;
 
 function TPYEKVSList.GetInt(const aKey:TPYEKVSKey; const aDefault:Integer):Integer;
 var iVT:TPYEKVSValueType;
 begin
     iVT:=GetKey(aKey);
-    KVSStream.ReadVTInt32(result, iVT, aDefault);
+    FStoreDocument.ReadVTInt32(result, iVT, aDefault);
 end;
 
 procedure TPYEKVSList.ChgInt(const aKey: TPYEKVSKey; const aValue: Integer);
@@ -1428,33 +1800,38 @@ begin
     //Change Value of existing Key; Value size must match
     iVT:=GetKey(aKey);
     if (iVT=pyeUnknown) then raise EPYEKVSException.CreateFmt(cStrPYEKVSExcept_KeyNotFound,[aKey]);
-    if (KVSStream.ValueTypeTst(aValue, iVT)=false) then
+    if (ValueTypeTst(aValue, iVT)=false) then
         raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
-    KVSStream.WriteVTInt(aValue, iVT);
+    FStoreDocument.WriteVTInt(aValue, iVT);
 end;
 
 
-procedure TPYEKVSList.PutInt64(const aKey: TPYEKVSKey; const aValue: Int64; const aForceValueType:TPYEKVSValueType=pyeUnknown);
+procedure TPYEKVSList.PutInt64(const aKey: TPYEKVSKey; const aValue: Int64);
+begin
+    PutInt64VT(aKey, aValue, pyeUnknown);
+end;
+
+procedure TPYEKVSList.PutInt64VT(const aKey: TPYEKVSKey; const aValue: Int64; const aForceValueType:TPYEKVSValueType);
 var iVT:TPYEKVSValueType;
 begin
     if (aForceValueType=pyeUnknown) then begin
-        iVT:=KVSStream.ValueTypeOf(aValue);
+        iVT:=ValueTypeOf(aValue);
     end else begin
         //Try to use aForceValueType; maybe aValue should be UInt32 (4Bytes) to make later the call "ChgUInt" with a higher aValue
         iVT:=aForceValueType;
-        if (KVSStream.ValueTypeTst(aValue, iVT)=false) then raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
+        if (ValueTypeTst(aValue, iVT)=false) then raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
     end;
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
-    FSizeData:=FSizeData+KVSStream.WriteValueType(iVT);
-    FSizeData:=FSizeData+KVSStream.WriteVTInt64(aValue, iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
+    FSizeData:=FSizeData+FStoreDocument.WriteValueType(iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTInt64(aValue, iVT);
 end;
 
 function TPYEKVSList.GetInt64(const aKey:TPYEKVSKey; const aDefault:Int64):Int64;
 var iVT:TPYEKVSValueType;
 begin
     iVT:=GetKey(aKey);
-    KVSStream.ReadVTInt64(result, iVT, aDefault);
+    FStoreDocument.ReadVTInt64(result, iVT, aDefault);
 end;
 
 procedure TPYEKVSList.ChgInt64(const aKey: TPYEKVSKey; const aValue: Int64);
@@ -1463,9 +1840,9 @@ begin
     //Change Value of existing Key; Value size must match
     iVT:=GetKey(aKey);
     if (iVT=pyeUnknown) then raise EPYEKVSException.CreateFmt(cStrPYEKVSExcept_KeyNotFound,[aKey]);
-    if (KVSStream.ValueTypeTst(aValue, iVT)=false) then
+    if (ValueTypeTst(aValue, iVT)=false) then
         raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
-    KVSStream.WriteVTInt64(aValue, iVT);
+    FStoreDocument.WriteVTInt64(aValue, iVT);
 end;
 
 
@@ -1473,40 +1850,45 @@ procedure TPYEKVSList.PutInt128(const aKey: TPYEKVSKey; const aValue: TPYEKVSInt
 var iVT:TPYEKVSValueType;
 begin
     iVT:=pyeInt128;
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
-    FSizeData:=FSizeData+KVSStream.WriteValueType(iVT);
-    FSizeData:=FSizeData+KVSStream.Write(aValue, cPYEKVSValueTypeSize[iVT]);
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
+    FSizeData:=FSizeData+FStoreDocument.WriteValueType(iVT);
+    FSizeData:=FSizeData+FStoreDocument._WriteInt128(aValue);
 end;
 
 function TPYEKVSList.GetInt128(const aKey:TPYEKVSKey; const aDefault:TPYEKVSInt128):TPYEKVSInt128;
 var iVT:TPYEKVSValueType;
 begin
     iVT:=GetKey(aKey);
-    KVSStream.ReadVTInt128(result, iVT, aDefault);
+    FStoreDocument.ReadVTInt128(result, iVT, aDefault);
 end;
 
-procedure TPYEKVSList.PutUInt(const aKey: TPYEKVSKey; const aValue: Cardinal; const aForceValueType:TPYEKVSValueType=pyeUnknown);
+procedure TPYEKVSList.PutUInt(const aKey: TPYEKVSKey; const aValue: Cardinal);
+begin
+    PutUIntVT(aKey, aValue, pyeUnknown);
+end;
+
+procedure TPYEKVSList.PutUIntVT(const aKey: TPYEKVSKey; const aValue: Cardinal; const aForceValueType:TPYEKVSValueType);
 var iVT:TPYEKVSValueType;
 begin
     if (aForceValueType=pyeUnknown) then begin
-        iVT:=KVSStream.ValueTypeOf(aValue);
+        iVT:=ValueTypeOf(aValue);
     end else begin
         //Try to use aForceValueType; maybe aValue should be UInt32 (4Bytes) to make later the call "ChgUInt" with a higher aValue
         iVT:=aForceValueType;
-        if (KVSStream.ValueTypeTst(aValue, iVT)=false) then raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
+        if (ValueTypeTst(aValue, iVT)=false) then raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
     end;
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
-    FSizeData:=FSizeData+KVSStream.WriteValueType(iVT);
-    FSizeData:=FSizeData+KVSStream.WriteVTUInt(aValue, iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
+    FSizeData:=FSizeData+FStoreDocument.WriteValueType(iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTUInt(aValue, iVT);
 end;
 
 function TPYEKVSList.GetUInt(const aKey:TPYEKVSKey; const aDefault:Cardinal):Cardinal;
 var iVT:TPYEKVSValueType;
 begin
     iVT:=GetKey(aKey);
-    KVSStream.ReadVTUInt32(result, iVT, aDefault);
+    FStoreDocument.ReadVTUInt32(result, iVT, aDefault);
 end;
 
 procedure TPYEKVSList.ChgUInt(const aKey: TPYEKVSKey; const aValue: Cardinal);
@@ -1515,34 +1897,38 @@ begin
     //Change Value of existing Key; Value size must match
     iVT:=GetKey(aKey);
     if (iVT=pyeUnknown) then raise EPYEKVSException.CreateFmt(cStrPYEKVSExcept_KeyNotFound,[aKey]);
-    if (KVSStream.ValueTypeTst(aValue, iVT)=false) then
+    if (ValueTypeTst(aValue, iVT)=false) then
         raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
-    KVSStream.WriteVTUInt(aValue, iVT);
+    FStoreDocument.WriteVTUInt(aValue, iVT);
 end;
 
 
+procedure TPYEKVSList.PutUInt64(const aKey: TPYEKVSKey; const aValue: UInt64);
+begin
+    PutUInt64VT(aKey, aValue, pyeUnknown);
+end;
 
-procedure TPYEKVSList.PutUInt64(const aKey: TPYEKVSKey; const aValue: UInt64; const aForceValueType:TPYEKVSValueType=pyeUnknown);
+procedure TPYEKVSList.PutUInt64VT(const aKey: TPYEKVSKey; const aValue: UInt64; const aForceValueType:TPYEKVSValueType);
 var iVT:TPYEKVSValueType;
 begin
     if (aForceValueType=pyeUnknown) then begin
-        iVT:=KVSStream.ValueTypeOf(aValue);
+        iVT:=ValueTypeOf(aValue);
     end else begin
         //Try to use aForceValueType; maybe aValue should be UInt32 (4Bytes) to make later the call "ChgUInt" with a higher aValue
         iVT:=aForceValueType;
-        if (KVSStream.ValueTypeTst(aValue, iVT)=false) then raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
+        if (ValueTypeTst(aValue, iVT)=false) then raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
     end;
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
-    FSizeData:=FSizeData+KVSStream.WriteValueType(iVT);
-    FSizeData:=FSizeData+KVSStream.WriteVTUInt64(aValue, iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
+    FSizeData:=FSizeData+FStoreDocument.WriteValueType(iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTUInt64(aValue, iVT);
 end;
 
 function TPYEKVSList.GetUInt64(const aKey:TPYEKVSKey; const aDefault:UInt64):UInt64;
 var iVT:TPYEKVSValueType;
 begin
     iVT:=GetKey(aKey);
-    KVSStream.ReadVTUInt64(result, iVT, aDefault);
+    FStoreDocument.ReadVTUInt64(result, iVT, aDefault);
 end;
 
 procedure TPYEKVSList.ChgUInt64(const aKey: TPYEKVSKey; const aValue: UInt64);
@@ -1551,9 +1937,9 @@ begin
     //Change Value of existing Key; Value size must match
     iVT:=GetKey(aKey);
     if (iVT=pyeUnknown) then raise EPYEKVSException.CreateFmt(cStrPYEKVSExcept_KeyNotFound,[aKey]);
-    if (KVSStream.ValueTypeTst(aValue, iVT)=false) then
+    if (ValueTypeTst(aValue, iVT)=false) then
         raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
-    KVSStream.WriteVTUInt64(aValue, iVT);
+    FStoreDocument.WriteVTUInt64(aValue, iVT);
 end;
 
 
@@ -1561,77 +1947,82 @@ procedure TPYEKVSList.PutUInt128(const aKey: TPYEKVSKey; const aValue: TPYEKVSUI
 var iVT:TPYEKVSValueType;
 begin
     iVT:=pyeUInt128;
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
-    FSizeData:=FSizeData+KVSStream.WriteValueType(iVT);
-    FSizeData:=FSizeData+KVSStream.Write(aValue, cPYEKVSValueTypeSize[iVT]);
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
+    FSizeData:=FSizeData+FStoreDocument.WriteValueType(iVT);
+    FSizeData:=FSizeData+FStoreDocument._WriteUInt128(aValue);
 end;
 
 function TPYEKVSList.GetUInt128(const aKey:TPYEKVSKey; const aDefault:TPYEKVSUInt128):TPYEKVSUInt128;
 var iVT:TPYEKVSValueType;
 begin
     iVT:=GetKey(aKey);
-    KVSStream.ReadVTUInt128(result, iVT, aDefault);
+    FStoreDocument.ReadVTUInt128(result, iVT, aDefault);
 end;
 
 procedure TPYEKVSList.PutSingle(const aKey: TPYEKVSKey; const aValue: Single);
 var iVT:TPYEKVSValueType;
 begin
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
-    iVT:=KVSStream.ValueTypeOf(aValue);
-    FSizeData:=FSizeData+KVSStream.WriteValueType(iVT);
-    FSizeData:=FSizeData+KVSStream.WriteVTSingle(aValue, iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
+    iVT:=ValueTypeOf(aValue);
+    FSizeData:=FSizeData+FStoreDocument.WriteValueType(iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTSingle(aValue, iVT);
 end;
 
 function TPYEKVSList.GetSingle(const aKey:TPYEKVSKey; const aDefault:Single):Single;
 var iVT:TPYEKVSValueType;
 begin
     iVT:=GetKey(aKey);
-    KVSStream.ReadVTSingle(result, iVT, aDefault);
+    FStoreDocument.ReadVTSingle(result, iVT, aDefault);
 end;
 
 procedure TPYEKVSList.PutDouble(const aKey: TPYEKVSKey; const aValue: Double);
 var iVT:TPYEKVSValueType;
 begin
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
-    iVT:=KVSStream.ValueTypeOf(aValue);
-    FSizeData:=FSizeData+KVSStream.WriteValueType(iVT);
-    FSizeData:=FSizeData+KVSStream.WriteVTDouble(aValue, iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
+    iVT:=ValueTypeOf(aValue);
+    FSizeData:=FSizeData+FStoreDocument.WriteValueType(iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTDouble(aValue, iVT);
 end;
 
 function TPYEKVSList.GetDouble(const aKey:TPYEKVSKey; const aDefault:Double):Double;
 var iVT:TPYEKVSValueType;
 begin
     iVT:=GetKey(aKey);
-    KVSStream.ReadVTDouble(result, iVT, aDefault);
+    FStoreDocument.ReadVTDouble(result, iVT, aDefault);
 end;
 
 
-procedure TPYEKVSList.PutString(const aKey: TPYEKVSKey; const aValue: String; const aForceValueType:TPYEKVSValueType=pyeUnknown);
+procedure TPYEKVSList.PutString(const aKey: TPYEKVSKey; const aValue: String);
+begin
+    PutStringVT(aKey, aValue, pyeUnknown);
+end;
+
+procedure TPYEKVSList.PutStringVT(const aKey: TPYEKVSKey; const aValue: String; const aForceValueType:TPYEKVSValueType);
 var iVT:TPYEKVSValueType;
     iStringUTF8:UTF8String;
 begin
     iStringUTF8:=UTF8Encode(aValue);
     if (aForceValueType=pyeUnknown) then begin
-        iVT:=KVSStream.ValueTypeOf(iStringUTF8);
+        iVT:=ValueTypeOf(iStringUTF8);
     end else begin
         //Try to use aForceValueType; maybe aValue should be UInt32 (4Bytes) to make later the call "ChgUInt" with a higher aValue
         iVT:=aForceValueType;
-        if (KVSStream.ValueTypeTst(iStringUTF8, iVT)=false) then raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
+        if (ValueTypeTst(iStringUTF8, iVT)=false) then raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
     end;
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
-    FSizeData:=FSizeData+KVSStream.WriteValueType(iVT);
-    FSizeData:=FSizeData+KVSStream.WriteVTStringUTF8(iStringUTF8, iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
+    FSizeData:=FSizeData+FStoreDocument.WriteValueType(iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTStringUTF8(iStringUTF8, iVT);
 end;
 
 function TPYEKVSList.GetString(const aKey:TPYEKVSKey; const aDefault:String):String;
 var iVT:TPYEKVSValueType;
 begin
     iVT:=GetKey(aKey);
-    result:=UTF8ToString(KVSStream.ReadVTStringUTF8(iVT, UTF8Encode(aDefault)));
+    result:=UTF8ToString(FStoreDocument.ReadVTStringUTF8(iVT, UTF8Encode(aDefault)));
 end;
 
 procedure TPYEKVSList.ChgString(const aKey: TPYEKVSKey; const aValue:String);
@@ -1642,33 +2033,38 @@ begin
     iStringUTF8:=UTF8Encode(aValue);
     iVT:=GetKey(aKey);
     if (iVT=pyeUnknown) then raise EPYEKVSException.CreateFmt(cStrPYEKVSExcept_KeyNotFound,[aKey]);
-    if (KVSStream.ValueTypeTst(iStringUTF8, iVT)=false) then
+    if (ValueTypeTst(iStringUTF8, iVT)=false) then
         raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
-    FSizeData:=FSizeData+KVSStream.WriteVTStringUTF8(iStringUTF8, iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTStringUTF8(iStringUTF8, iVT);
 end;
 
 
-procedure TPYEKVSList.PutUTF8String(const aKey: TPYEKVSKey; const aValue: UTF8String; const aForceValueType:TPYEKVSValueType=pyeUnknown);
+procedure TPYEKVSList.PutUTF8String(const aKey: TPYEKVSKey; const aValue: UTF8String);
+begin
+    PutUTF8StringVT(aKey, aValue, pyeUnknown);
+end;
+
+procedure TPYEKVSList.PutUTF8StringVT(const aKey: TPYEKVSKey; const aValue: UTF8String; const aForceValueType:TPYEKVSValueType);
 var iVT:TPYEKVSValueType;
 begin
     if (aForceValueType=pyeUnknown) then begin
-        iVT:=KVSStream.ValueTypeOf(aValue);
+        iVT:=ValueTypeOf(aValue);
     end else begin
         //Try to use aForceValueType; maybe aValue should be UInt32 (4Bytes) to make later the call "ChgUInt" with a higher aValue
         iVT:=aForceValueType;
-        if (KVSStream.ValueTypeTst(aValue, iVT)=false) then raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
+        if (ValueTypeTst(aValue, iVT)=false) then raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
     end;
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
-    FSizeData:=FSizeData+KVSStream.WriteValueType(iVT);
-    FSizeData:=FSizeData+KVSStream.WriteVTStringUTF8(aValue, iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
+    FSizeData:=FSizeData+FStoreDocument.WriteValueType(iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTStringUTF8(aValue, iVT);
 end;
 
 function TPYEKVSList.GetUTF8String(const aKey:TPYEKVSKey; const aDefault:UTF8String):UTF8String;
 var iVT:TPYEKVSValueType;
 begin
     iVT:=GetKey(aKey);
-    result:=KVSStream.ReadVTStringUTF8(iVT, aDefault);
+    result:=FStoreDocument.ReadVTStringUTF8(iVT, aDefault);
 end;
 
 procedure TPYEKVSList.ChgUTF8String(const aKey: TPYEKVSKey; const aValue:UTF8String);
@@ -1677,21 +2073,21 @@ begin
     //Change Value of existing Key; Value size must match
     iVT:=GetKey(aKey);
     if (iVT=pyeUnknown) then raise EPYEKVSException.CreateFmt(cStrPYEKVSExcept_KeyNotFound,[aKey]);
-    if (KVSStream.ValueTypeTst(aValue, iVT)=false) then
+    if (ValueTypeTst(aValue, iVT)=false) then
         raise EPYEKVSException.Create(cStrPYEKVSExcept_ValueNotCompatible);
-    FSizeData:=FSizeData+KVSStream.WriteVTStringUTF8(aValue, iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTStringUTF8(aValue, iVT);
 end;
 
 
 procedure TPYEKVSList.PutMemory(const aKey: TPYEKVSKey; const aValue: TStream);
 var iVT:TPYEKVSValueType;
 begin
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
     if (aValue.Size>0) then iVT:=pyeMemory
     else iVT:=pyeZero;
-    FSizeData:=FSizeData+KVSStream.WriteValueType(iVT);
-    FSizeData:=FSizeData+KVSStream.WriteVTMemoryStream(aValue, iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteValueType(iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTMemoryStream(aValue, iVT);
 end;
 
 function TPYEKVSList.GetMemory(const aKey: TPYEKVSKey; aValue:TStream):Integer;
@@ -1699,18 +2095,18 @@ var iVT:TPYEKVSValueType;
 begin
     //result: Bytes read
     iVT:=GetKey(aKey);
-    result:=KVSStream.ReadVTMemoryStream(iVT, aValue);
+    result:=FStoreDocument.ReadVTMemoryStream(iVT, aValue);
 end;
 
 procedure TPYEKVSList.PutMemory(const aKey:TPYEKVSKey; const aBuffer: Pointer; aSize: Cardinal);
 var iVT:TPYEKVSValueType;
 begin
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
     if (aSize>0) then iVT:=pyeMemory
     else iVT:=pyeZero;
-    FSizeData:=FSizeData+KVSStream.WriteValueType(iVT);
-    FSizeData:=FSizeData+KVSStream.WriteVTMemoryBuffer(aBuffer, aSize, iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteValueType(iVT);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTMemoryBuffer(aBuffer, aSize, iVT);
 end;
 
 function TPYEKVSList.GetMemory(const aKey: TPYEKVSKey; const aBuffer: Pointer; aSize: Cardinal):Integer;
@@ -1718,7 +2114,7 @@ var iVT:TPYEKVSValueType;
 begin
     //result: Bytes read
     iVT:=GetKey(aKey);
-    result:=KVSStream.ReadVTMemoryBuffer(iVT, aBuffer, aSize);
+    result:=FStoreDocument.ReadVTMemoryBuffer(iVT, aBuffer, aSize);
 end;
 
 function TPYEKVSList.PutStream(const aKey:TPYEKVSKey):TStream;
@@ -1726,9 +2122,9 @@ var iMemStream:TPYEKVSMemoryStream;
 begin
     iMemStream:=TPYEKVSMemoryStream.Create(FStoreDocument, self, aKey);
 
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
-    FList.Add(KVSStream.Position, iMemStream);      //Position after Key
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
+    FList.Add(FStoreDocument.StreamPosition, iMemStream);      //Position after Key
 
     FSizeData:=FSizeData+iMemStream.WriteHeader;
     result:=iMemStream.GetStream;
@@ -1743,8 +2139,8 @@ var iPos:Int64;
 begin
     result:=nil;
     if FKeys.TryGetValue(aKey, iPos) then begin
-        KVSStream.Position:=iPos;
-        iPosHead:=iPos+KVSStream.ReadValueType(iVT);
+        FStoreDocument.StreamPosition:=iPos;
+        iPosHead:=iPos+FStoreDocument.ReadValueType(iVT);
         if (iVT=pyeMemory) then begin
             if FList.TryGetValue(iPos, iBranch) then begin
                 if (iBranch is TPYEKVSMemoryStream) then begin
@@ -1763,11 +2159,11 @@ end;
 
 function TPYEKVSList.PutList(const aKey: TPYEKVSKey): TPYEKVSList;
 begin
-    result:=TPYEKVSList.Create(FStoreDocument, self, aKey);
+    result:=FStoreDocument.RClassPYEKVSList.Create(FStoreDocument, self, aKey);
 
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
-    FList.Add(KVSStream.Position, result);      //Position after Key
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
+    FList.Add(FStoreDocument.StreamPosition, result);      //Position after Key
 
     FSizeData:=FSizeData+result.WriteHeader;
 end;
@@ -1780,23 +2176,28 @@ var iPos:Int64;
 begin
     result:=nil;
     if FKeys.TryGetValue(aKey, iPos) then begin
-        KVSStream.Position:=iPos;
-        KVSStream.ReadValueType(iVT);
+        FStoreDocument.StreamPosition:=iPos;
+        FStoreDocument.ReadValueType(iVT);
         if (iVT=pyeList) then begin
             if FList.TryGetValue(iPos, iBranch) then begin
                 result:=TPYEKVSList(iBranch);
             end;
         end;
     end;
+    if (result=nil) then begin
+        //create a empty list to read default values ...
+        result:=FStoreDocument.FallbackList();
+    end;
 end;
+
 
 function TPYEKVSList.PutArray(const aKey: TPYEKVSKey; const aValueType:TPYEKVSValueType): TPYEKVSArray;
 begin
-    result:=TPYEKVSArray.Create(FStoreDocument, self, aKey, aValueType);
+    result:=FStoreDocument.RClassPYEKVSArray.Create(FStoreDocument, self, aKey, aValueType);
 
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
-    FList.Add(KVSStream.Position, result);      //Position after Key
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
+    FList.Add(FStoreDocument.StreamPosition, result);      //Position after Key
 
     FSizeData:=FSizeData+result.WriteHeader(aValueType);
 end;
@@ -1808,23 +2209,27 @@ var iPos:Int64;
 begin
     result:=nil;
     if FKeys.TryGetValue(aKey, iPos) then begin
-        KVSStream.Position:=iPos;
-        KVSStream.ReadValueType(iVT);
+        FStoreDocument.StreamPosition:=iPos;
+        FStoreDocument.ReadValueType(iVT);
         if (iVT=pyeArray) then begin
             if FList.TryGetValue(iPos, iBranch) then begin
                 result:=TPYEKVSArray(iBranch);
             end;
         end;
     end;
+    if (result=nil) then begin
+        //create a empty array to read default values ...
+        result:=FStoreDocument.FallbackArray();
+    end;
 end;
 
 function TPYEKVSList.PutArrayMap(const aKey: TPYEKVSKey; const aValueTypeMap:TPYEKVSValueTypeMap): TPYEKVSArrayMap;
 begin
-    result:=TPYEKVSArrayMap.Create(FStoreDocument, self, aKey, aValueTypeMap);
+    result:=FStoreDocument.RClassPYEKVSArrayMap.Create(FStoreDocument, self, aKey, aValueTypeMap);
 
-    FSizeData:=FSizeData+KVSStream.WriteKey(self, aKey);
-    KeyAdd(aKey, KVSStream.Position);       //Position before WriteValueType
-    FList.Add(KVSStream.Position, result);      //Position after Key
+    FSizeData:=FSizeData+FStoreDocument.WriteKey(self, aKey);
+    KeyAdd(aKey, FStoreDocument.StreamPosition);       //Position before WriteValueType
+    FList.Add(FStoreDocument.StreamPosition, result);      //Position after Key
 
     FSizeData:=FSizeData+result.WriteHeader();
 end;
@@ -1836,13 +2241,17 @@ var iPos:Int64;
 begin
     result:=nil;
     if FKeys.TryGetValue(aKey, iPos) then begin
-        KVSStream.Position:=iPos;
-        KVSStream.ReadValueType(iVT);
+        FStoreDocument.StreamPosition:=iPos;
+        FStoreDocument.ReadValueType(iVT);
         if (iVT=pyeArrayMap) then begin
             if FList.TryGetValue(iPos, iBranch) then begin
                 result:=TPYEKVSArrayMap(iBranch);
             end;
         end;
+    end;
+    if (result=nil) then begin
+        //create a empty array to read default values ...
+        result:=FStoreDocument.FallbackArrayMap();
     end;
 end;
 
@@ -1857,179 +2266,18 @@ begin
 end;
 
 
-{ TPYEKVSStream }
 
-class function TPYEKVSStream.ValueTypeOf(const aValue:Boolean):TPYEKVSValueType;
-begin
-    //return the pyeValueType to store aValue
-    if (aValue=false) then result:=pyeZero
-    else result:=pyeBool;
-end;
-
-class function TPYEKVSStream.ValueTypeOf(const aValue:Integer):TPYEKVSValueType;
-begin
-    //return the pyeValueType to store aValue
-    if (aValue=0) then result:=pyeZero
-    else if (aValue=1) then result:=pyeBool
-    else if (AValue>=Low(Int8))AND(AValue<=High(Int8)) then result:=pyeInt8
-    else if (AValue>=Low(UInt8))AND(aValue<=High(UInt8)) then result:=pyeUInt8
-    else if (AValue>=Low(Int16))AND(AValue<=High(Int16)) then result:=pyeInt16
-    else if (AValue>=Low(UInt16))AND(aValue<=High(UInt16)) then result:=pyeUInt16
-    else result:=pyeInt32;
-end;
-
-class function TPYEKVSStream.ValueTypeTst(const aValue:Integer; const aVT:TPYEKVSValueType):Boolean;
-begin
-    //Test if aValue can be coded as aVT
-    case aVT of
-    pyeZero: result:=(aValue=0);
-    pyeBool: result:=(aValue=1);
-    pyeInt8: result:=(AValue>=Low(Int8))AND(AValue<=High(Int8));
-    pyeUInt8: result:=(AValue>=Low(UInt8))AND(aValue<=High(UInt8));
-    pyeInt16: result:=(AValue>=Low(Int16))AND(AValue<=High(Int16));
-    pyeUInt16: result:=(AValue>=Low(UInt16))AND(aValue<=High(UInt16));
-    pyeInt32: result:=true;
-    else result:=false;
-    end;
-end;
-
-class function TPYEKVSStream.ValueTypeOf(const aValue:Int64):TPYEKVSValueType;
-begin
-    //return the pyeValueType to store aValue
-    if (aValue=0) then result:=pyeZero
-    else if (aValue=1) then result:=pyeBool
-    else if (AValue>=Low(Int8))AND(AValue<=High(Int8)) then result:=pyeInt8
-    else if (AValue>=Low(UInt8))AND(aValue<=High(UInt8)) then result:=pyeUInt8
-    else if (AValue>=Low(Int16))AND(AValue<=High(Int16)) then result:=pyeInt16
-    else if (AValue>=Low(UInt16))AND(aValue<=High(UInt16)) then result:=pyeUInt16
-    else if (AValue>=Low(Int32))AND(AValue<=High(Int32)) then result:=pyeInt32
-    else if (AValue>=Low(UInt32))AND(AValue<=High(UInt32)) then result:=pyeUInt32
-    else result:=pyeInt64;
-end;
-
-class function TPYEKVSStream.ValueTypeTst(const aValue:Int64; const aVT:TPYEKVSValueType):Boolean;
-begin
-    //Test if aValue can be coded as aVT
-    case aVT of
-    pyeZero: result:=(aValue=0);
-    pyeBool: result:=(aValue=1);
-    pyeInt8: result:=(AValue>=Low(Int8))AND(AValue<=High(Int8));
-    pyeUInt8: result:=(AValue>=Low(UInt8))AND(aValue<=High(UInt8));
-    pyeInt16: result:=(AValue>=Low(Int16))AND(AValue<=High(Int16));
-    pyeUInt16: result:=(AValue>=Low(UInt16))AND(aValue<=High(UInt16));
-    pyeInt32: result:=(AValue>=Low(UInt32))AND(AValue<=High(UInt32));
-    pyeInt64: result:=true;
-    else result:=false;
-    end;
-end;
-
-class function TPYEKVSStream.ValueTypeOf(const aValue:Cardinal):TPYEKVSValueType;
-begin
-    //return the pyeValueType to store aValue
-    if (aValue=0) then result:=pyeZero
-    else if (aValue=1) then result:=pyeBool
-    else if (aValue<=High(UInt8)) then result:=pyeUInt8
-    else if (aValue<=High(UInt16)) then result:=pyeUInt16
-    else result:=pyeUInt32;
-end;
-
-class function TPYEKVSStream.ValueTypeTst(const aValue:Cardinal; const aVT:TPYEKVSValueType):Boolean;
-begin
-    //Test if aValue can be coded as aVT
-    case aVT of
-    pyeZero: result:=(aValue=0);
-    pyeBool: result:=(aValue=1);
-    pyeUInt8: result:=(aValue<=High(UInt8));
-    pyeUInt16: result:=(aValue<=High(UInt16));
-    pyeUInt32: result:=true;
-    else result:=false;
-    end;
-end;
-
-class function TPYEKVSStream.ValueTypeOf(const aValue:UInt64):TPYEKVSValueType;
-begin
-    //return the pyeValueType to store aValue
-    if (aValue=0) then result:=pyeZero
-    else if (aValue=1) then result:=pyeBool
-    else if (aValue<=High(UInt8)) then result:=pyeUInt8
-    else if (aValue<=High(UInt16)) then result:=pyeUInt16
-    else if (aValue<=High(UInt32)) then result:=pyeUInt32
-    else result:=pyeUInt64;
-end;
-
-class function TPYEKVSStream.ValueTypeTst(const aValue:UInt64; const aVT:TPYEKVSValueType):Boolean;
-begin
-    //Test if aValue can be coded as aVT
-    case aVT of
-    pyeZero: result:=(aValue=0);
-    pyeBool: result:=(aValue=1);
-    pyeUInt8: result:=(aValue<=High(UInt8));
-    pyeUInt16: result:=(aValue<=High(UInt16));
-    pyeUInt32: result:=(aValue<=High(UInt32));
-    pyeUInt64: result:=true;
-    else result:=false;
-    end;
-end;
-
-class function TPYEKVSStream.ValueTypeOf(const aValue:Single):TPYEKVSValueType;
-begin
-    //return the pyeValueType to store aValue
-    if IsZero(aValue) then result:=pyeZero
-    else result:=pyeFloat32;
-end;
-
-class function TPYEKVSStream.ValueTypeOf(const aValue:Double):TPYEKVSValueType;
-var S:Single;
-begin
-    //return the pyeValueType to store aValue
-    if IsZero(aValue) then result:=pyeZero
-    else begin
-        S:=aValue;
-        if (IsZero(aValue-S)) then result:=pyeFloat32
-        else result:=pyeFloat64;
-    end;
-end;
-
-class function TPYEKVSStream.ValueTypeOf(const aValue:UTF8String):TPYEKVSValueType;
-var Len:Integer;
-begin
-    //return the pyeValueType to store aValue
-    Len:=Length(aValue);
-    if Len=0 then result:=pyeZero
-    else if (Len<=High(UInt8)) then result:=pyeStringUTF8S
-    else result:=pyeStringUTF8L;
-end;
-
-class function TPYEKVSStream.ValueTypeTst(const aValue:UTF8String; const aVT:TPYEKVSValueType):Boolean;
-var Len:Integer;
-begin
-    //Test if aValue can be coded as aVT
-    Len:=Length(aValue);
-    case aVT of
-    pyeZero: result:=(Len=0);
-    pyeStringUTF8S: result:=(Len<=High(UInt8));
-    pyeStringUTF8L: result:=true;
-    else result:=false;
-    end;
-end;
-
-procedure TPYEKVSStream.Clear;
-begin
-    inherited Clear();
-    FWriteBranch:=nil;
-end;
-
-function TPYEKVSStream.ReadKey(out aKey: TPYEKVSKey): Integer;
+function TPYEKVSDocument.ReadKey(out aKey: TPYEKVSKey): Integer;
 var Len:TPYEKVSKeySize;
 begin
-    result:=Read(Len, sizeof(TPYEKVSKeySize));
+    result:=FStream.Read(Len, sizeof(TPYEKVSKeySize));
     if (Len>0) then begin
         SetLength(aKey, Len);
-        result:=result+Read(aKey[1], Len);
+        result:=result+FStream.Read(aKey[1], Len);
     end;
 end;
 
-function TPYEKVSStream.WriteKey(const aBranch:TPYEKVSBranch; const aKey: TPYEKVSKey):Integer;
+function TPYEKVSDocument.WriteKey(const aBranch:TPYEKVSBranch; const aKey: TPYEKVSKey):Integer;
 var Len:Integer;
 begin
     WriteBranchSet(aBranch);
@@ -2038,12 +2286,12 @@ begin
     if (Len>High(TPYEKVSKeySize)) then begin
         raise EPYEKVSException.Create('Key too long');
     end;
-    result:=Write(Len, sizeof(TPYEKVSKeySize));
+    result:=FStream.Write(Len, sizeof(TPYEKVSKeySize));
     if (Len>0) then
-        result:=result+Write(aKey[1], Len);
+        result:=result+FStream.Write(aKey[1], Len);
 end;
 
-procedure TPYEKVSStream.WriteBranchSet(const aBranch:TPYEKVSBranch);
+procedure TPYEKVSDocument.WriteBranchSet(const aBranch:TPYEKVSBranch);
 begin
     if (aBranch<>FWriteBranch) then begin
         WriteEnd(aBranch);
@@ -2051,12 +2299,12 @@ begin
     end;
 end;
 
-procedure TPYEKVSStream.WriteBegin(const aNewWriteBranch:TPYEKVSBranch);
+procedure TPYEKVSDocument.WriteBegin(const aNewWriteBranch:TPYEKVSBranch);
 begin
     if (aNewWriteBranch<>nil) then begin
 
         //Root branch must be in state srzstate_writing; otherwise PutBegin was missing
-        if aNewWriteBranch.FStoreDocument.State<>srzstate_PutValues then raise EPYEKVSException.Create('store branch root is not ready for writing. call PutBegin ... PutEnd');
+        if aNewWriteBranch.FStoreDocument.FRoot.State<>srzstate_PutValues then raise EPYEKVSException.Create('store branch root is not ready for writing. call PutBegin ... PutEnd');
 
         FWriteBranch:=aNewWriteBranch;
         while (FWriteBranch<>nil)AND(FWriteBranch.State<>srzstate_PutValues) do begin
@@ -2067,7 +2315,7 @@ begin
     end;
 end;
 
-procedure TPYEKVSStream.WriteEnd(const aNewWriteBranch:TPYEKVSBranch);
+procedure TPYEKVSDocument.WriteEnd(const aNewWriteBranch:TPYEKVSBranch);
 begin
     if (FWriteBranch<>nil) then begin
         if (aNewWriteBranch<>nil)AND(aNewWriteBranch.Parent=FWriteBranch) then exit;
@@ -2080,55 +2328,55 @@ begin
 end;
 
 
-function TPYEKVSStream.ReadValueType(out aVT:TPYEKVSValueType):Integer;
+function TPYEKVSDocument.ReadValueType(out aVT:TPYEKVSValueType):Integer;
 var iVT:TPYEKVSValueTypeSize;
 begin
-    result:=Read(iVT, sizeof(TPYEKVSValueTypeSize));
+    result:=FStream.Read(iVT, sizeof(TPYEKVSValueTypeSize));
     aVT:=GValueTypeValue[iVT];
 end;
 
-function TPYEKVSStream.WriteValueType(const aVT:TPYEKVSValueType):Integer;
+function TPYEKVSDocument.WriteValueType(const aVT:TPYEKVSValueType):Integer;
 begin
-    result:=Write(cPYEKVSValueTypeID[aVT], sizeof(TPYEKVSValueTypeSize));
+    result:=FStream.Write(cPYEKVSValueTypeID[aVT], sizeof(TPYEKVSValueTypeSize));
 end;
 
 
-function TPYEKVSStream.ReadFixUInt8(out aValue:UInt8):Integer;
+function TPYEKVSDocument.ReadFixUInt8(out aValue:UInt8):Integer;
 begin
     //special function for list size
-    result:=Read(aValue, 1);
+    result:=FStream.Read(aValue, 1);
 end;
 
-function TPYEKVSStream.WriteFixUInt8(const aValue:UInt8; const aPosition:Int64=0):Integer;
+function TPYEKVSDocument.WriteFixUInt8(const aValue:UInt8; const aPosition:Int64=0):Integer;
 begin
     if (aPosition<>0) then begin
         //set stream position
-        Position:=aPosition;
+        FStream.Position:=aPosition;
     end;
-    result:=Write(aValue, 1);
+    result:=FStream.Write(aValue, 1);
     //set stream position end
-    Seek(0, soEnd);
+    FStream.Seek(0, soEnd);
 end;
 
-function TPYEKVSStream.ReadFixUInt32(out aValue:UInt32):Integer;
+function TPYEKVSDocument.ReadFixUInt32(out aValue:UInt32):Integer;
 begin
     //special function for list size
-    result:=Read(aValue, 4);
+    result:=FStream.Read(aValue, 4);
 end;
 
-function TPYEKVSStream.WriteFixUInt32(const aValue:UInt32; const aPosition:Int64=0):Integer;
+function TPYEKVSDocument.WriteFixUInt32(const aValue:UInt32; const aPosition:Int64=0):Integer;
 begin
     if (aPosition<>0) then begin
         //set stream position
-        Position:=aPosition;
+        FStream.Position:=aPosition;
     end;
-    result:=Write(aValue, 4);
+    result:=FStream.Write(aValue, 4);
     //set stream position end
-    Seek(0, soEnd);
+    FStream.Seek(0, soEnd);
 end;
 
 
-function TPYEKVSStream.ReadVTBool(out aValue:Boolean; const aVT:TPYEKVSValueType; const aDefault:Boolean):Integer;
+function TPYEKVSDocument.ReadVTBool(out aValue:Boolean; const aVT:TPYEKVSValueType; const aDefault:Boolean):Integer;
 begin
     result:=0;
     case aVT of
@@ -2139,51 +2387,59 @@ begin
 end;
 
 
-function TPYEKVSStream._WriteInt8(const aValue:Int8):Integer;
+function TPYEKVSDocument._WriteInt8(const aValue:Int8):Integer;
 begin
-    result:=Write(aValue, cPYEKVSValueTypeSize[pyeInt8]);
+    result:=FStream.Write(aValue, cPYEKVSValueTypeSize[pyeInt8]);
 end;
-function TPYEKVSStream._WriteUInt8(const aValue:UInt8):Integer;
+function TPYEKVSDocument._WriteUInt8(const aValue:UInt8):Integer;
 begin
-    result:=Write(aValue, cPYEKVSValueTypeSize[pyeUInt8]);
+    result:=FStream.Write(aValue, cPYEKVSValueTypeSize[pyeUInt8]);
 end;
-function TPYEKVSStream._WriteInt16(const aValue:Int16):Integer;
+function TPYEKVSDocument._WriteInt16(const aValue:Int16):Integer;
 begin
-    result:=Write(aValue, cPYEKVSValueTypeSize[pyeInt16]);
-end;
-
-function TPYEKVSStream._WriteUInt16(const aValue:UInt16):Integer;
-begin
-    result:=Write(aValue, cPYEKVSValueTypeSize[pyeUInt16]);
-end;
-function TPYEKVSStream._WriteInt32(const aValue:Int32):Integer;
-begin
-    result:=Write(aValue, cPYEKVSValueTypeSize[pyeInt32]);
+    result:=FStream.Write(aValue, cPYEKVSValueTypeSize[pyeInt16]);
 end;
 
-function TPYEKVSStream._WriteUInt32(const aValue:UInt32):Integer;
+function TPYEKVSDocument._WriteUInt16(const aValue:UInt16):Integer;
 begin
-    result:=Write(aValue, cPYEKVSValueTypeSize[pyeUInt32]);
+    result:=FStream.Write(aValue, cPYEKVSValueTypeSize[pyeUInt16]);
+end;
+function TPYEKVSDocument._WriteInt32(const aValue:Int32):Integer;
+begin
+    result:=FStream.Write(aValue, cPYEKVSValueTypeSize[pyeInt32]);
 end;
 
-function TPYEKVSStream._WriteInt64(const aValue:Int64):Integer;
+function TPYEKVSDocument._WriteUInt32(const aValue:UInt32):Integer;
 begin
-    result:=Write(aValue, cPYEKVSValueTypeSize[pyeInt64]);
-end;
-function TPYEKVSStream._WriteUInt64(const aValue:UInt64):Integer;
-begin
-    result:=Write(aValue, cPYEKVSValueTypeSize[pyeUInt64]);
-end;
-function TPYEKVSStream._WriteFloat32(const aValue:Single):Integer;
-begin
-    result:=Write(aValue, cPYEKVSValueTypeSize[pyeFloat32]);
-end;
-function TPYEKVSStream._WriteFloat64(const aValue:Double):Integer;
-begin
-    result:=Write(aValue, cPYEKVSValueTypeSize[pyeFloat64]);
+    result:=FStream.Write(aValue, cPYEKVSValueTypeSize[pyeUInt32]);
 end;
 
-function TPYEKVSStream._WriteStringUTF8S(const aValue:UTF8String):Integer;
+function TPYEKVSDocument._WriteInt64(const aValue:Int64):Integer;
+begin
+    result:=FStream.Write(aValue, cPYEKVSValueTypeSize[pyeInt64]);
+end;
+function TPYEKVSDocument._WriteUInt64(const aValue:UInt64):Integer;
+begin
+    result:=FStream.Write(aValue, cPYEKVSValueTypeSize[pyeUInt64]);
+end;
+function TPYEKVSDocument._WriteInt128(const aValue:TPYEKVSInt128):Integer;
+begin
+    result:=FStream.Write(aValue, cPYEKVSValueTypeSize[pyeInt128]);
+end;
+function TPYEKVSDocument._WriteUInt128(const aValue:TPYEKVSUInt128):Integer;
+begin
+    result:=FStream.Write(aValue, cPYEKVSValueTypeSize[pyeUInt128]);
+end;
+function TPYEKVSDocument._WriteFloat32(const aValue:Single):Integer;
+begin
+    result:=FStream.Write(aValue, cPYEKVSValueTypeSize[pyeFloat32]);
+end;
+function TPYEKVSDocument._WriteFloat64(const aValue:Double):Integer;
+begin
+    result:=FStream.Write(aValue, cPYEKVSValueTypeSize[pyeFloat64]);
+end;
+
+function TPYEKVSDocument._WriteStringUTF8S(const aValue:UTF8String):Integer;
 var iLen   : Cardinal;
 begin
     //Small String; Char lenght UInt8
@@ -2194,10 +2450,10 @@ begin
     result:=WriteFixUInt8(iLen);
     //UTF8 value
     if (iLen>0) then
-        result:=result+Write(aValue[1], iLen);
+        result:=result+FStream.Write(aValue[1], iLen);
 end;
 
-function TPYEKVSStream._WriteStringUTF8L(const aValue:UTF8String):Integer;
+function TPYEKVSDocument._WriteStringUTF8L(const aValue:UTF8String):Integer;
 var iLen   : Cardinal;
 begin
     //Large String; Char lenght UInt32
@@ -2206,11 +2462,11 @@ begin
     result:=WriteFixUInt32(iLen);
     //UTF8 value
     if (iLen>0) then
-        result:=result+Write(aValue[1], iLen);
+        result:=result+FStream.Write(aValue[1], iLen);
 end;
 
 
-function TPYEKVSStream._WriteMemoryStream(const aValue: TStream):Integer;
+function TPYEKVSDocument._WriteMemoryStream(const aValue: TStream):Integer;
 var iData:array[0..31] of Byte;
     iSize:Int64;
     iLen: Integer;
@@ -2223,23 +2479,23 @@ begin
     while iSize>0 do begin
         iLen:=Min(iSize, sizeof(iData));
         aValue.Read(iData, iLen);
-        result:=result+Write(iData[0], iLen);
+        result:=result+FStream.Write(iData[0], iLen);
         iSize:=iSize-iLen;
     end;
 end;
 
-function TPYEKVSStream._WriteMemoryBuffer(const aValue: Pointer; aSize: Cardinal):Integer;
+function TPYEKVSDocument._WriteMemoryBuffer(const aValue: Pointer; aSize: Cardinal):Integer;
 begin
     //Memory head (size)
     result:=WriteFixUInt32(aSize);
     //Memory data copy
     if (aSize>0) then begin
-        result:=result+Write(aValue, aSize);
+        result:=result+FStream.Write(aValue, aSize);
     end;
 end;
 
 
-function TPYEKVSStream.WriteVTInt(const aValue: Integer; const aVT: TPYEKVSValueType): Integer;
+function TPYEKVSDocument.WriteVTInt(const aValue: Integer; const aVT: TPYEKVSValueType): Integer;
 begin
     case aVT of
     pyeZero: result:=0;
@@ -2258,7 +2514,7 @@ begin
         raise EPYEKVSException.Create('WriteVTInt wrong ValueType');
     end;
 end;
-function TPYEKVSStream.WriteVTUInt(const aValue: Cardinal; const aVT: TPYEKVSValueType): Integer;
+function TPYEKVSDocument.WriteVTUInt(const aValue: Cardinal; const aVT: TPYEKVSValueType): Integer;
 begin
     case aVT of
     pyeZero: result:=0;
@@ -2277,7 +2533,7 @@ begin
         raise EPYEKVSException.Create('WriteVTUInt wrong ValueType');
     end;
 end;
-function TPYEKVSStream.WriteVTInt64(const aValue: Int64; const aVT: TPYEKVSValueType): Integer;
+function TPYEKVSDocument.WriteVTInt64(const aValue: Int64; const aVT: TPYEKVSValueType): Integer;
 begin
     case aVT of
     pyeZero: result:=0;
@@ -2296,7 +2552,7 @@ begin
         raise EPYEKVSException.Create('WriteVTInt64 wrong ValueType');
     end;
 end;
-function TPYEKVSStream.WriteVTUInt64(const aValue: UInt64; const aVT: TPYEKVSValueType): Integer;
+function TPYEKVSDocument.WriteVTUInt64(const aValue: UInt64; const aVT: TPYEKVSValueType): Integer;
 begin
     case aVT of
     pyeZero: result:=0;
@@ -2316,7 +2572,7 @@ begin
     end;
 end;
 
-function TPYEKVSStream.WriteVTSingle(const aValue: Single; const aVT: TPYEKVSValueType): Integer;
+function TPYEKVSDocument.WriteVTSingle(const aValue: Single; const aVT: TPYEKVSValueType): Integer;
 begin
     case aVT of
     pyeZero: result:=0;
@@ -2328,7 +2584,7 @@ begin
     end;
 end;
 
-function TPYEKVSStream.WriteVTDouble(const aValue: Double; const aVT: TPYEKVSValueType): Integer;
+function TPYEKVSDocument.WriteVTDouble(const aValue: Double; const aVT: TPYEKVSValueType): Integer;
 begin
     case aVT of
     pyeZero: result:=0;
@@ -2340,7 +2596,7 @@ begin
     end;
 end;
 
-function TPYEKVSStream.WriteVTStringUTF8(const aValue:UTF8String; const aVT:TPYEKVSValueType):Integer;
+function TPYEKVSDocument.WriteVTStringUTF8(const aValue:UTF8String; const aVT:TPYEKVSValueType):Integer;
 begin
     case aVT of
     pyeZero: result:=0;
@@ -2351,7 +2607,7 @@ begin
     end;
 end;
 
-function TPYEKVSStream.WriteVTMemoryStream(const aValue:TStream; const aVT:TPYEKVSValueType):Integer;
+function TPYEKVSDocument.WriteVTMemoryStream(const aValue:TStream; const aVT:TPYEKVSValueType):Integer;
 begin
     case aVT of
     pyeZero: result:=0;
@@ -2361,7 +2617,7 @@ begin
     end;
 end;
 
-function TPYEKVSStream.WriteVTMemoryBuffer(const aValue: Pointer; aSize: Cardinal; const aVT:TPYEKVSValueType):Integer;
+function TPYEKVSDocument.WriteVTMemoryBuffer(const aValue: Pointer; aSize: Cardinal; const aVT:TPYEKVSValueType):Integer;
 begin
     case aVT of
     pyeZero: result:=0;
@@ -2373,69 +2629,69 @@ end;
 
 
 
-function TPYEKVSStream._ReadInt8(out aValue:Int8):Integer;
+function TPYEKVSDocument._ReadInt8(out aValue:Int8):Integer;
 begin
-    result:=Read(aValue, cPYEKVSValueTypeSize[pyeInt8]);
+    result:=FStream.Read(aValue, cPYEKVSValueTypeSize[pyeInt8]);
 end;
-function TPYEKVSStream._ReadUInt8(out aValue:UInt8):Integer;
+function TPYEKVSDocument._ReadUInt8(out aValue:UInt8):Integer;
 begin
-    result:=Read(aValue, cPYEKVSValueTypeSize[pyeUInt8]);
+    result:=FStream.Read(aValue, cPYEKVSValueTypeSize[pyeUInt8]);
 end;
-function TPYEKVSStream._ReadInt16(out aValue:Int16):Integer;
+function TPYEKVSDocument._ReadInt16(out aValue:Int16):Integer;
 begin
-    result:=Read(aValue, cPYEKVSValueTypeSize[pyeInt16]);
+    result:=FStream.Read(aValue, cPYEKVSValueTypeSize[pyeInt16]);
 end;
-function TPYEKVSStream._ReadUInt16(out aValue:UInt16):Integer;
+function TPYEKVSDocument._ReadUInt16(out aValue:UInt16):Integer;
 begin
-    result:=Read(aValue, cPYEKVSValueTypeSize[pyeUInt16]);
+    result:=FStream.Read(aValue, cPYEKVSValueTypeSize[pyeUInt16]);
 end;
-function TPYEKVSStream._ReadInt32(out aValue:Int32):Integer;
+function TPYEKVSDocument._ReadInt32(out aValue:Int32):Integer;
 begin
-    result:=Read(aValue, cPYEKVSValueTypeSize[pyeInt32]);
+    result:=FStream.Read(aValue, cPYEKVSValueTypeSize[pyeInt32]);
 end;
-function TPYEKVSStream._ReadUInt32(out aValue:UInt32):Integer;
+function TPYEKVSDocument._ReadUInt32(out aValue:UInt32):Integer;
 begin
-    result:=Read(aValue, cPYEKVSValueTypeSize[pyeUInt32]);
+    result:=FStream.Read(aValue, cPYEKVSValueTypeSize[pyeUInt32]);
 end;
-function TPYEKVSStream._ReadInt64(out aValue:Int64):Integer;
+function TPYEKVSDocument._ReadInt64(out aValue:Int64):Integer;
 begin
-    result:=Read(aValue, cPYEKVSValueTypeSize[pyeInt64]);
+    result:=FStream.Read(aValue, cPYEKVSValueTypeSize[pyeInt64]);
 end;
-function TPYEKVSStream._ReadUInt64(out aValue:UInt64):Integer;
+function TPYEKVSDocument._ReadUInt64(out aValue:UInt64):Integer;
 begin
-    result:=Read(aValue, cPYEKVSValueTypeSize[pyeUInt64]);
-end;
-
-function TPYEKVSStream._ReadInt128(out aValue:TPYEKVSInt128):Integer;
-begin
-    result:=Read(aValue, cPYEKVSValueTypeSize[pyeInt128]);
-end;
-function TPYEKVSStream._ReadUInt128(out aValue:TPYEKVSUInt128):Integer;
-begin
-    result:=Read(aValue, cPYEKVSValueTypeSize[pyeUInt128]);
+    result:=FStream.Read(aValue, cPYEKVSValueTypeSize[pyeUInt64]);
 end;
 
-function TPYEKVSStream._ReadFloat32(out aValue:Single):Integer;
+function TPYEKVSDocument._ReadInt128(out aValue:TPYEKVSInt128):Integer;
 begin
-    result:=Read(aValue, cPYEKVSValueTypeSize[pyeFloat32]);
+    result:=FStream.Read(aValue, cPYEKVSValueTypeSize[pyeInt128]);
 end;
-function TPYEKVSStream._ReadFloat64(out aValue:Double):Integer;
+function TPYEKVSDocument._ReadUInt128(out aValue:TPYEKVSUInt128):Integer;
 begin
-    result:=Read(aValue, cPYEKVSValueTypeSize[pyeFloat64]);
+    result:=FStream.Read(aValue, cPYEKVSValueTypeSize[pyeUInt128]);
 end;
-function TPYEKVSStream._ReadFloat128(out aValue:TPYEKVSFloat128):Integer;
+
+function TPYEKVSDocument._ReadFloat32(out aValue:Single):Integer;
 begin
-    result:=Read(aValue, cPYEKVSValueTypeSize[pyeFloat128]);
+    result:=FStream.Read(aValue, cPYEKVSValueTypeSize[pyeFloat32]);
+end;
+function TPYEKVSDocument._ReadFloat64(out aValue:Double):Integer;
+begin
+    result:=FStream.Read(aValue, cPYEKVSValueTypeSize[pyeFloat64]);
+end;
+function TPYEKVSDocument._ReadFloat128(out aValue:TPYEKVSFloat128):Integer;
+begin
+    result:=FStream.Read(aValue, cPYEKVSValueTypeSize[pyeFloat128]);
 end;
 
 
-function TPYEKVSStream._ReadStringUTF8(out aValue:UTF8String; const aLen:Cardinal):Integer;
+function TPYEKVSDocument._ReadStringUTF8(out aValue:UTF8String; const aLen:Cardinal):Integer;
 begin
     SetLength(aValue, aLen);
-    result:=Read(aValue[1], aLen);
+    result:=FStream.Read(aValue[1], aLen);
 end;
 
-function TPYEKVSStream._ReadStringUTF8S(out aValue:UTF8String):Integer;
+function TPYEKVSDocument._ReadStringUTF8S(out aValue:UTF8String):Integer;
 var uLen: UInt8;
 begin
     //UTF8 head
@@ -2444,7 +2700,7 @@ begin
     else aValue:='';
 end;
 
-function TPYEKVSStream._ReadStringUTF8L(out aValue:UTF8String):Integer;
+function TPYEKVSDocument._ReadStringUTF8L(out aValue:UTF8String):Integer;
 var uLen: UInt32;
 begin
     //UTF8 head
@@ -2453,7 +2709,7 @@ begin
     else aValue:='';
 end;
 
-function TPYEKVSStream._ReadMemoryStream(aValue:TStream; out aByteRead:Integer):Integer;
+function TPYEKVSDocument._ReadMemoryStream(aValue:TStream; out aByteRead:Integer):Integer;
 var iData:array[0..31] of Byte;
     uSize: Cardinal;
     iSize:Int64;
@@ -2466,13 +2722,13 @@ begin
     iSize:=uSize;
     while iSize>0 do begin
         iLen:=Min(iSize, sizeof(iData));
-        result:=result+Read(iData, iLen);
+        result:=result+FStream.Read(iData, iLen);
         aByteRead:=aByteRead+aValue.Write(iData, iLen);
         iSize:=iSize-iLen;
     end;
 end;
 
-function TPYEKVSStream._ReadMemoryBuffer(const aValue: Pointer; aSize: Cardinal; out aByteRead:Integer):Integer;
+function TPYEKVSDocument._ReadMemoryBuffer(const aValue: Pointer; aSize: Cardinal; out aByteRead:Integer):Integer;
 var uSize: Cardinal;
 begin
     aByteRead:=0;
@@ -2481,64 +2737,64 @@ begin
     if (uSize>0) then begin
         //Memory data copy
         aByteRead:=Min(aSize, uSize);
-        result:=result+Read(aValue^, aByteRead);
+        result:=result+FStream.Read(aValue^, aByteRead);
     end;
 end;
 
 
-function TPYEKVSStream.ReadInt8():Int8;
+function TPYEKVSDocument.ReadInt8():Int8;
 begin
     _ReadInt8(result);
 end;
-function TPYEKVSStream.ReadUInt8():UInt8;
+function TPYEKVSDocument.ReadUInt8():UInt8;
 begin
     _ReadUInt8(result);
 end;
-function TPYEKVSStream.ReadInt16():Int16;
+function TPYEKVSDocument.ReadInt16():Int16;
 begin
     _ReadInt16(result);
 end;
-function TPYEKVSStream.ReadUInt16():UInt16;
+function TPYEKVSDocument.ReadUInt16():UInt16;
 begin
     _ReadUInt16(result);
 end;
-function TPYEKVSStream.ReadInt32():Int32;
+function TPYEKVSDocument.ReadInt32():Int32;
 begin
     _ReadInt32(result);
 end;
-function TPYEKVSStream.ReadUInt32():UInt32;
+function TPYEKVSDocument.ReadUInt32():UInt32;
 begin
     _ReadUInt32(result);
 end;
-function TPYEKVSStream.ReadInt64():Int64;
+function TPYEKVSDocument.ReadInt64():Int64;
 begin
     _ReadInt64(result);
 end;
-function TPYEKVSStream.ReadUInt64():UInt64;
+function TPYEKVSDocument.ReadUInt64():UInt64;
 begin
     _ReadUInt64(result);
 end;
-function TPYEKVSStream.ReadFloat32():Single;
+function TPYEKVSDocument.ReadFloat32():Single;
 begin
     _ReadFloat32(result);
 end;
-function TPYEKVSStream.ReadFloat64():Double;
+function TPYEKVSDocument.ReadFloat64():Double;
 begin
     _ReadFloat64(result);
 end;
 
-function TPYEKVSStream.ReadStringUTF8S():UTF8String;
+function TPYEKVSDocument.ReadStringUTF8S():UTF8String;
 begin
     _ReadStringUTF8S(result);
 end;
-function TPYEKVSStream.ReadStringUTF8L():UTF8String;
+function TPYEKVSDocument.ReadStringUTF8L():UTF8String;
 begin
     _ReadStringUTF8L(result);
 end;
 
 
 
-function TPYEKVSStream.ReadVTInt32(out aValue:Int32; const aVT:TPYEKVSValueType; const aDefault:Int32):Integer;
+function TPYEKVSDocument.ReadVTInt32(out aValue:Int32; const aVT:TPYEKVSValueType; const aDefault:Int32):Integer;
 
     function __ReadInt8():Integer;
     var I:Int8;
@@ -2613,7 +2869,7 @@ begin
     end;
 end;
 
-function TPYEKVSStream.ReadVTInt64(out aValue:Int64; const aVT:TPYEKVSValueType; const aDefault:Int64):Integer;
+function TPYEKVSDocument.ReadVTInt64(out aValue:Int64; const aVT:TPYEKVSValueType; const aDefault:Int64):Integer;
 
     function __ReadInt8():Integer;
     var I:Int8;
@@ -2685,7 +2941,7 @@ begin
     end;
 end;
 
-function TPYEKVSStream.ReadVTInt128(out aValue:TPYEKVSInt128; const aVT:TPYEKVSValueType; const aDefault:TPYEKVSInt128):Integer;
+function TPYEKVSDocument.ReadVTInt128(out aValue:TPYEKVSInt128; const aVT:TPYEKVSValueType; const aDefault:TPYEKVSInt128):Integer;
 begin
     result:=0;
     case aVT of
@@ -2697,7 +2953,7 @@ begin
 end;
 
 
-function TPYEKVSStream.ReadVTUInt32(out aValue:UInt32; const aVT:TPYEKVSValueType; const aDefault:UInt32):Integer;
+function TPYEKVSDocument.ReadVTUInt32(out aValue:UInt32; const aVT:TPYEKVSValueType; const aDefault:UInt32):Integer;
 
     function __ReadInt8():Integer;
     var I:Int8;
@@ -2774,7 +3030,7 @@ begin
     end;
 end;
 
-function TPYEKVSStream.ReadVTUInt64(out aValue:UInt64; const aVT:TPYEKVSValueType; const aDefault:UInt64):Integer;
+function TPYEKVSDocument.ReadVTUInt64(out aValue:UInt64; const aVT:TPYEKVSValueType; const aDefault:UInt64):Integer;
 
     function __ReadInt8():Integer;
     var I:Int8;
@@ -2850,7 +3106,7 @@ begin
     end;
 end;
 
-function TPYEKVSStream.ReadVTUInt128(out aValue:TPYEKVSUInt128; const aVT:TPYEKVSValueType; const aDefault:TPYEKVSUInt128):Integer;
+function TPYEKVSDocument.ReadVTUInt128(out aValue:TPYEKVSUInt128; const aVT:TPYEKVSValueType; const aDefault:TPYEKVSUInt128):Integer;
 begin
     result:=0;
     case aVT of
@@ -2861,7 +3117,7 @@ begin
     end;
 end;
 
-function TPYEKVSStream.ReadVTSingle(out aValue:Single; const aVT:TPYEKVSValueType; const aDefault:Single):Integer;
+function TPYEKVSDocument.ReadVTSingle(out aValue:Single; const aVT:TPYEKVSValueType; const aDefault:Single):Integer;
 
     function __ReadInt8():Integer;
     var I:Int8;
@@ -2938,7 +3194,7 @@ begin
 end;
 
 
-function TPYEKVSStream.ReadVTDouble(out aValue:Double; const aVT:TPYEKVSValueType; const aDefault:Double):Integer;
+function TPYEKVSDocument.ReadVTDouble(out aValue:Double; const aVT:TPYEKVSValueType; const aDefault:Double):Integer;
 
     function __ReadInt8():Integer;
     var I:Int8;
@@ -3015,7 +3271,7 @@ begin
 end;
 
 
-function TPYEKVSStream.ReadVTStringUTF8(const aVT:TPYEKVSValueType; const aDefault:UTF8String):UTF8String;
+function TPYEKVSDocument.ReadVTStringUTF8(const aVT:TPYEKVSValueType; const aDefault:UTF8String):UTF8String;
 begin
     case aVT of
     pyeZero: result:='';
@@ -3025,7 +3281,7 @@ begin
     end;
 end;
 
-function TPYEKVSStream.ReadVTMemoryStream(const aVT:TPYEKVSValueType; aValue:TStream):Integer;
+function TPYEKVSDocument.ReadVTMemoryStream(const aVT:TPYEKVSValueType; aValue:TStream):Integer;
 begin
     case aVT of
     pyeMemory: _ReadMemoryStream(aValue, result);
@@ -3033,7 +3289,7 @@ begin
     end;
 end;
 
-function TPYEKVSStream.ReadVTMemoryBuffer(const aVT:TPYEKVSValueType; const aValue: Pointer; aSize: Cardinal):Integer;
+function TPYEKVSDocument.ReadVTMemoryBuffer(const aVT:TPYEKVSValueType; const aValue: Pointer; aSize: Cardinal):Integer;
 begin
     case aVT of
     pyeMemory: _ReadMemoryBuffer(aValue, aSize, result);
@@ -3043,8 +3299,8 @@ end;
 
 
 
-function TPYEKVSStream.ReadToString(const aVT:TPYEKVSValueType):string;
-    //Read fundamental values given by aVT to a string
+function TPYEKVSDocument.ReadToString(const aVT:TPYEKVSValueType):string;
+    //FKVSStream.Read fundamental values given by aVT to a string
 
     procedure __FmtInt8();
     var iValue:Int8;
@@ -3172,7 +3428,7 @@ function TPYEKVSStream.ReadToString(const aVT:TPYEKVSValueType):string;
         if (uLen>32) then
             uLen:=32;
         SetLength(iValue, uLen);
-        Read(iValue, uLen);
+        FStream.Read(iValue, uLen);
         //Hex-Output
         SetLength(result, Length(iValue)*2);
         P:=@(result[1]);
@@ -3210,6 +3466,60 @@ begin
     pyeStringUTF8L: __FmtStringUTF8L();
     pyeMemory: __FmtMemory();
     else raise EPYEKVSException.Create('ReadVTTo String wrong ValueType');
+    end;
+end;
+
+function TPYEKVSDocument.EncodeVT(const aValueType:TPYEKVSValueType):Integer;
+begin
+    case aValueType of
+    pyeStringUTF8S: result:=EncodeStringUTF8S();
+    pyeStringUTF8L: result:=EncodeStringUTF8L();
+    pyeMemory: result:=EncodeMemory();
+    else result:=EncodeFundamental(aValueType);
+    end;
+end;
+
+
+function TPYEKVSDocument.EncodeFundamental(const aValueType:TPYEKVSValueType):Integer;
+begin
+    result:=cPYEKVSValueTypeSize[aValueType];
+    //skip value bytes
+    FStream.Position:=FStream.Position+result;
+end;
+
+function TPYEKVSDocument.EncodeStringUTF8S():Integer;
+var uLen   : UInt8;
+begin
+    //UTF8 head
+    result:=ReadFixUInt8(uLen);
+    if (uLen>0) then begin
+        //skip UTF8 chars
+        result:=result+Integer(uLen);
+        FStream.Position:=FStream.Position+uLen;
+    end;
+end;
+
+function TPYEKVSDocument.EncodeStringUTF8L():Integer;
+var uLen   : UInt32;
+begin
+    //UTF8 head
+    result:=ReadFixUInt32(uLen);
+    if (uLen>0) then begin
+        //skip UTF8 chars
+        result:=result+Integer(uLen);
+        FStream.Position:=FStream.Position+uLen;
+    end;
+end;
+
+function TPYEKVSDocument.EncodeMemory():Integer;
+var uSize: UInt32;
+begin
+    //Memory head
+    result:=ReadFixUInt32(uSize);
+    if (uSize>0) then begin
+        //skip memory bytes
+        result:=result+Integer(uSize);
+        FStream.Position:=FStream.Position+uSize;
     end;
 end;
 
@@ -3287,23 +3597,23 @@ var uSize:Cardinal;
 begin
     result:=inherited Encode();
 
-    result:=result+KVSStream.ReadValueType(FValueType);
+    result:=result+FStoreDocument.ReadValueType(FValueType);
 
     SetValueTypeAllowed(FValueType);
 
     //size
-    FPosSize:=KVSStream.Position;
-    result:=result+KVSStream.ReadFixUInt32(uSize);
+    FPosSize:=FStoreDocument.StreamPosition;
+    result:=result+FStoreDocument.ReadFixUInt32(uSize);
     FSizeData:=uSize;
     iSize:=uSize;
 
     //count
-    FPosCount:=KVSStream.Position;
-    result:=result+KVSStream.ReadFixUInt32(uCount);
+    FPosCount:=FStoreDocument.StreamPosition;
+    result:=result+FStoreDocument.ReadFixUInt32(uCount);
     FCount:=uCount;
 
     //save values start posittion
-    FPosValues:=KVSStream.Position;
+    FPosValues:=FStoreDocument.StreamPosition;
 
 
     if (FValueType in cPYEKVSValueTypeOfArrayDynamicLen) then begin
@@ -3314,8 +3624,8 @@ begin
 
         iIndex:=0;
         while iSize>0 do begin
-            FPosList.Add(iIndex, KVSStream.Position);
-            iSize:=iSize-EncodeVT(FValueType);
+            FPosList.Add(iIndex, FStoreDocument.StreamPosition);
+            iSize:=iSize-FStoreDocument.EncodeVT(FValueType);
             Inc(iIndex);
         end;
         if (iSize<>0) then raise EPYEKVSException.Create('encode dynamic array failes by size mismatch');
@@ -3328,7 +3638,7 @@ begin
 
         //skip values
         result:=result+Integer(uSize);
-        KVSStream.Position:=KVSStream.Position+uSize;
+        FStoreDocument.StreamPosition:=FStoreDocument.StreamPosition+uSize;
     end;
 end;
 
@@ -3340,26 +3650,26 @@ begin
     if not (FValueType in cPYEKVSValueTypeOfArray) then raise EPYEKVSException.CreateFmt('requested array ValueType %s not supported',[cPYEKVSValueTypeName[FValueType]]);
 
 
-    result:=KVSStream.WriteValueType(pyeArray);
-    KVSStream.WriteBranchSet(self);     //change to new branch
+    result:=FStoreDocument.WriteValueType(pyeArray);
+    FStoreDocument.WriteBranchSet(self);     //change to new branch
 
-    result:=result+KVSStream.WriteValueType(FValueType);
+    result:=result+FStoreDocument.WriteValueType(FValueType);
 
-    FPosSize:=KVSStream.Position;
-    result:=result+KVSStream.WriteFixUInt32(0);           //Placeholder of Size-Value
+    FPosSize:=FStoreDocument.StreamPosition;
+    result:=result+FStoreDocument.WriteFixUInt32(0);           //Placeholder of Size-Value
 
-    FPosCount:=KVSStream.Position;
-    result:=result+KVSStream.WriteFixUInt32(0);           //Placeholder of Count-Value
+    FPosCount:=FStoreDocument.StreamPosition;
+    result:=result+FStoreDocument.WriteFixUInt32(0);           //Placeholder of Count-Value
 
-    FPosValues:=KVSStream.Position;
+    FPosValues:=FStoreDocument.StreamPosition;
 end;
 
 procedure TPYEKVSArray.SetPutClosed();
 begin
     //Update SizeData
-    KVSStream.WriteFixUInt32(FSizeData, FPosSize);
+    FStoreDocument.WriteFixUInt32(FSizeData, FPosSize);
     //Update Count
-    KVSStream.WriteFixUInt32(FCount, FPosCount);
+    FStoreDocument.WriteFixUInt32(FCount, FPosCount);
 
     inherited SetPutClosed;
 end;
@@ -3367,7 +3677,7 @@ end;
 procedure TPYEKVSArray.GetIndexPosCalc(const aIndex:Cardinal);
 begin
     if (aIndex>=FCount) then raise EPYEKVSException.CreateFmt('get array item at index %d is out of count %d',[aIndex, FCount]);
-    KVSStream.Position:=FPosValues+cPYEKVSValueTypeSize[FValueType]*aIndex;
+    FStoreDocument.StreamPosition:=FPosValues+cPYEKVSValueTypeSize[FValueType]*aIndex;
 end;
 
 procedure TPYEKVSArray.GetIndexPosList(const aIndex:Cardinal);
@@ -3375,79 +3685,79 @@ var iPos:Int64;
 begin
     if FPosList=nil then raise EPYEKVSException.Create('array PosList not in use');
     if (aIndex>=FCount)OR(FPosList.TryGetValue(aIndex, iPos)=false) then raise EPYEKVSException.CreateFmt('get array item at index %d is out of count %d',[aIndex, FCount]);
-    KVSStream.Position:=iPos;
+    FStoreDocument.StreamPosition:=iPos;
 end;
 
 procedure TPYEKVSArray.PutInt(const aValue: Integer);
 begin
-    if not (KVSStream.ValueTypeOf(aValue) in FValueTypeAllowed) then raise EPYEKVSException.CreateFmt('array value with ValueType %s cannot filled',[cPYEKVSValueTypeName[KVSStream.ValueTypeOf(aValue)]]);
-    KVSStream.WriteBranchSet(self);
-    FSizeData:=FSizeData+KVSStream.WriteVTInt(aValue, FValueType);
+    if not (ValueTypeOf(aValue) in FValueTypeAllowed) then raise EPYEKVSException.CreateFmt('array value with ValueType %s cannot filled',[cPYEKVSValueTypeName[ValueTypeOf(aValue)]]);
+    FStoreDocument.WriteBranchSet(self);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTInt(aValue, FValueType);
     FCount:=FCount+1;
 end;
 
 function TPYEKVSArray.GetInt(const aIndex:Cardinal; const aDefault:Integer):Integer;
 begin
     GetIndexPosCalc(aIndex);
-    KVSStream.ReadVTInt32(result, FValueType, aDefault);
+    FStoreDocument.ReadVTInt32(result, FValueType, aDefault);
 end;
 
 procedure TPYEKVSArray.PutInt64(const aValue: Int64);
 begin
-    if not (KVSStream.ValueTypeOf(aValue) in FValueTypeAllowed) then raise EPYEKVSException.CreateFmt('array value with ValueType %s cannot filled',[cPYEKVSValueTypeName[KVSStream.ValueTypeOf(aValue)]]);
-    KVSStream.WriteBranchSet(self);
-    FSizeData:=FSizeData+KVSStream.WriteVTInt64(aValue, FValueType);
+    if not (ValueTypeOf(aValue) in FValueTypeAllowed) then raise EPYEKVSException.CreateFmt('array value with ValueType %s cannot filled',[cPYEKVSValueTypeName[ValueTypeOf(aValue)]]);
+    FStoreDocument.WriteBranchSet(self);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTInt64(aValue, FValueType);
     FCount:=FCount+1;
 end;
 
 function TPYEKVSArray.GetInt64(const aIndex:Cardinal; const aDefault:Int64):Int64;
 begin
     GetIndexPosCalc(aIndex);
-    KVSStream.ReadVTInt64(result, FValueType, aDefault);
+    FStoreDocument.ReadVTInt64(result, FValueType, aDefault);
 end;
 
 
 procedure TPYEKVSArray.PutUInt(const aValue:UInt32);
 begin
-    if not (KVSStream.ValueTypeOf(aValue) in FValueTypeAllowed) then raise EPYEKVSException.CreateFmt('array value with ValueType %s cannot filled',[cPYEKVSValueTypeName[KVSStream.ValueTypeOf(aValue)]]);
-    KVSStream.WriteBranchSet(self);
-    FSizeData:=FSizeData+KVSStream.WriteVTUInt(aValue, FValueType);
+    if not (ValueTypeOf(aValue) in FValueTypeAllowed) then raise EPYEKVSException.CreateFmt('array value with ValueType %s cannot filled',[cPYEKVSValueTypeName[ValueTypeOf(aValue)]]);
+    FStoreDocument.WriteBranchSet(self);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTUInt(aValue, FValueType);
     FCount:=FCount+1;
 end;
 
 function TPYEKVSArray.GetUInt(const aIndex:Cardinal; const aDefault:Cardinal=0):Cardinal;
 begin
     GetIndexPosCalc(aIndex);
-    KVSStream.ReadVTUInt32(result, FValueType, aDefault);
+    FStoreDocument.ReadVTUInt32(result, FValueType, aDefault);
 end;
 
 procedure TPYEKVSArray.PutUInt64(const aValue:UInt64);
 begin
-    if not (KVSStream.ValueTypeOf(aValue) in FValueTypeAllowed) then raise EPYEKVSException.CreateFmt('array value with ValueType %s cannot filled',[cPYEKVSValueTypeName[KVSStream.ValueTypeOf(aValue)]]);
-    KVSStream.WriteBranchSet(self);
-    FSizeData:=FSizeData+KVSStream.WriteVTUInt64(aValue, FValueType);
+    if not (ValueTypeOf(aValue) in FValueTypeAllowed) then raise EPYEKVSException.CreateFmt('array value with ValueType %s cannot filled',[cPYEKVSValueTypeName[ValueTypeOf(aValue)]]);
+    FStoreDocument.WriteBranchSet(self);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTUInt64(aValue, FValueType);
     FCount:=FCount+1;
 end;
 
 function TPYEKVSArray.GetUInt64(const aIndex:Cardinal; const aDefault:UInt64=0):UInt64;
 begin
     GetIndexPosCalc(aIndex);
-    KVSStream.ReadVTUInt64(result, FValueType, aDefault);
+    FStoreDocument.ReadVTUInt64(result, FValueType, aDefault);
 end;
 
 
 procedure TPYEKVSArray.PutSingle(const aValue:Single);
 begin
     if not (pyeFloat32 in FValueTypeAllowed) then raise EPYEKVSException.CreateFmt('array value with ValueType %s cannot filled',[cPYEKVSValueTypeName[pyeFloat32]]);
-    KVSStream.WriteBranchSet(self);
-    FSizeData:=FSizeData+KVSStream.WriteVTSingle(aValue, FValueType);
+    FStoreDocument.WriteBranchSet(self);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTSingle(aValue, FValueType);
     FCount:=FCount+1;
 end;
 
 function TPYEKVSArray.GetSingle(const aIndex:Cardinal; const aDefault:Single=0):Single;
 begin
     GetIndexPosCalc(aIndex);
-    KVSStream.ReadVTSingle(result, FValueType, aDefault);
+    FStoreDocument.ReadVTSingle(result, FValueType, aDefault);
 end;
 
 procedure TPYEKVSArray.PosListAdd(const aIndex: Cardinal; const aPos: Int64);
@@ -3459,15 +3769,15 @@ end;
 procedure TPYEKVSArray.PutDouble(const aValue:Double);
 begin
     if not (pyeFloat64 in FValueTypeAllowed) then raise EPYEKVSException.CreateFmt('array value with ValueType %s cannot filled',[cPYEKVSValueTypeName[pyeFloat64]]);
-    KVSStream.WriteBranchSet(self);
-    FSizeData:=FSizeData+KVSStream.WriteVTDouble(aValue, FValueType);
+    FStoreDocument.WriteBranchSet(self);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTDouble(aValue, FValueType);
     FCount:=FCount+1;
 end;
 
 function TPYEKVSArray.GetDouble(const aIndex:Cardinal; const aDefault:Double=0):Double;
 begin
     GetIndexPosCalc(aIndex);
-    KVSStream.ReadVTDouble(result, FValueType, aDefault);
+    FStoreDocument.ReadVTDouble(result, FValueType, aDefault);
 end;
 
 
@@ -3476,64 +3786,64 @@ var iVT:TPYEKVSValueType;
     iStringUTF8: UTF8String;
 begin
     iStringUTF8:=UTF8Encode(aValue);
-    iVT:=KVSStream.ValueTypeOf(iStringUTF8);
+    iVT:=ValueTypeOf(iStringUTF8);
     if not (iVT in FValueTypeAllowed) then raise EPYEKVSException.CreateFmt('array value with ValueType %s cannot filled',[cPYEKVSValueTypeName[iVT]]);
-    KVSStream.WriteBranchSet(self);
-    PosListAdd(FCount, KVSStream.Position);
-    FSizeData:=FSizeData+KVSStream.WriteVTStringUTF8(iStringUTF8, FValueType);
+    FStoreDocument.WriteBranchSet(self);
+    PosListAdd(FCount, FStoreDocument.StreamPosition);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTStringUTF8(iStringUTF8, FValueType);
     FCount:=FCount+1;
 end;
 function TPYEKVSArray.GetString(const aIndex:Cardinal; const aDefault:String=''):String;
 begin
     GetIndexPosList(aIndex);
-    result:=UTF8ToString(KVSStream.ReadVTStringUTF8(FValueType, UTF8Encode(aDefault)));
+    result:=UTF8ToString(FStoreDocument.ReadVTStringUTF8(FValueType, UTF8Encode(aDefault)));
 end;
 
 procedure TPYEKVSArray.PutUTF8String(const aValue:UTF8String);
 var iVT:TPYEKVSValueType;
 begin
-    iVT:=KVSStream.ValueTypeOf(aValue);
+    iVT:=ValueTypeOf(aValue);
     if not (iVT in FValueTypeAllowed) then raise EPYEKVSException.CreateFmt('array value with ValueType %s cannot filled',[cPYEKVSValueTypeName[iVT]]);
-    KVSStream.WriteBranchSet(self);
-    PosListAdd(FCount, KVSStream.Position);
-    FSizeData:=FSizeData+KVSStream.WriteVTStringUTF8(aValue, FValueType);
+    FStoreDocument.WriteBranchSet(self);
+    PosListAdd(FCount, FStoreDocument.StreamPosition);
+    FSizeData:=FSizeData+FStoreDocument.WriteVTStringUTF8(aValue, FValueType);
     FCount:=FCount+1;
 end;
 function TPYEKVSArray.GetUTF8String(const aIndex:Cardinal; const aDefault:UTF8String=''):UTF8String;
 begin
     GetIndexPosList(aIndex);
-    result:=KVSStream.ReadVTStringUTF8(FValueType, aDefault);
+    result:=FStoreDocument.ReadVTStringUTF8(FValueType, aDefault);
 end;
 
 
 procedure TPYEKVSArray.PutMemory(const aValue: TStream);
 begin
     if not (pyeMemory in FValueTypeAllowed) then raise EPYEKVSException.CreateFmt('array value with ValueType %s cannot filled',[cPYEKVSValueTypeName[pyeMemory]]);
-    KVSStream.WriteBranchSet(self);
-    PosListAdd(FCount, KVSStream.Position);
-    FSizeData:=FSizeData+KVSStream._WriteMemoryStream(aValue);
+    FStoreDocument.WriteBranchSet(self);
+    PosListAdd(FCount, FStoreDocument.StreamPosition);
+    FSizeData:=FSizeData+FStoreDocument._WriteMemoryStream(aValue);
     FCount:=FCount+1;
 end;
 
 function TPYEKVSArray.GetMemory(const aIndex:Cardinal; aValue:TStream):Integer;
 begin
     GetIndexPosList(aIndex);
-    result:=KVSStream.ReadVTMemoryStream(FValueType, aValue);
+    result:=FStoreDocument.ReadVTMemoryStream(FValueType, aValue);
 end;
 
 procedure TPYEKVSArray.PutMemory(const aBuffer: Pointer; aSize: Cardinal);
 begin
     if not (pyeMemory in FValueTypeAllowed) then raise EPYEKVSException.CreateFmt('array value with ValueType %s cannot filled',[cPYEKVSValueTypeName[pyeMemory]]);
-    KVSStream.WriteBranchSet(self);
-    PosListAdd(FCount, KVSStream.Position);
-    FSizeData:=FSizeData+KVSStream._WriteMemoryBuffer(aBuffer, aSize);
+    FStoreDocument.WriteBranchSet(self);
+    PosListAdd(FCount, FStoreDocument.StreamPosition);
+    FSizeData:=FSizeData+FStoreDocument._WriteMemoryBuffer(aBuffer, aSize);
     FCount:=FCount+1;
 end;
 
 function TPYEKVSArray.GetMemory(const aIndex:Cardinal; const aBuffer: Pointer; aSize: Cardinal):Integer;
 begin
     GetIndexPosList(aIndex);
-    result:=KVSStream.ReadVTMemoryBuffer(FValueType, aBuffer, aSize);
+    result:=FStoreDocument.ReadVTMemoryBuffer(FValueType, aBuffer, aSize);
 end;
 
 
@@ -3545,13 +3855,13 @@ begin
     inherited;
     sIndenting:=aActIndenting+aIndenting;
 
-    KVSStream.Position:=FPosValues;
+    FStoreDocument.StreamPosition:=FPosValues;
 
     if (FCount>0) then begin            //FCount is Cardinal; FCount-1 not allowed
 
         for i:=0 to FCount-1 do begin
 
-            s:=sIndenting+KVSStream.ReadToString(FValueType);
+            s:=sIndenting+FStoreDocument.ReadToString(FValueType);
 
             if i<FCount-1 then
                 s:=s+Str_PYEKVSComma;
@@ -3568,10 +3878,10 @@ begin
     inherited;
     sIndenting:=aActIndenting+aIndenting;
 
-    KVSStream.Position:=FPosValues;
+    FStoreDocument.StreamPosition:=FPosValues;
     if (FCount>0) then begin            //FCount is Cardinal; FCount-1 not allowed
         for i:=0 to FCount-1 do begin
-            aString.Add( sIndenting+KVSStream.ReadToString(FValueType) );
+            aString.Add( sIndenting+FStoreDocument.ReadToString(FValueType) );
         end;
     end;
 end;
@@ -3643,37 +3953,37 @@ begin
     //Read Map header ..
 
     //Read ValueTypeMap Length (2 Byte)
-    result:=result+KVSStream._ReadUInt16(MapLen);
+    result:=result+FStoreDocument._ReadUInt16(MapLen);
 
 
     //Write ValueTypeMap
     SetLength(FValueTypeMap, MapLen);
 
     for iMap:=0 to MapLen-1 do begin
-        result:=result+KVSStream.ReadValueType(FValueTypeMap[iMap]);
+        result:=result+FStoreDocument.ReadValueType(FValueTypeMap[iMap]);
     end;
 
     //size
-    FPosSize:=KVSStream.Position;
-    result:=result+KVSStream.ReadFixUInt32(uSize);
+    FPosSize:=FStoreDocument.StreamPosition;
+    result:=result+FStoreDocument.ReadFixUInt32(uSize);
     FSizeData:=uSize;
     iSize:=uSize;
 
     //count
-    FPosCount:=KVSStream.Position;
-    result:=result+KVSStream.ReadFixUInt32(uCount);
+    FPosCount:=FStoreDocument.StreamPosition;
+    result:=result+FStoreDocument.ReadFixUInt32(uCount);
     FCount:=uCount;
 
     //save values start posittion
-    FPosValues:=KVSStream.Position;
+    FPosValues:=FStoreDocument.StreamPosition;
 
     //Encode the item positions (maybe dynamic item size in the array)
     iIndex:=0;
     while iSize>0 do begin
-        FPosList.Add(iIndex, KVSStream.Position);
+        FPosList.Add(iIndex, FStoreDocument.StreamPosition);
 
         for iMap:=0 to High(FValueTypeMap) do begin
-            iSize:=iSize-EncodeVT( FValueTypeMap[iMap] );
+            iSize:=iSize-FStoreDocument.EncodeVT( FValueTypeMap[iMap] );
         end;
 
         Inc(iIndex);
@@ -3698,36 +4008,36 @@ begin
         raise EPYEKVSException.CreateFmt('ArrayMap length too long',[]);
 
 
-    result:=KVSStream.WriteValueType(pyeArrayMap);
-    KVSStream.WriteBranchSet(self);     //change to new branch
+    result:=FStoreDocument.WriteValueType(pyeArrayMap);
+    FStoreDocument.WriteBranchSet(self);     //change to new branch
 
     //Write ValueTypeMap Length (2 Byte)
-    result:=result+KVSStream._WriteUInt16(MapLen);
+    result:=result+FStoreDocument._WriteUInt16(MapLen);
 
     //Write ValueTypeMap
     for i:=0 to MapLen-1 do begin
         if not (FValueTypeMap[i] in cPYEKVSValueTypeOfArray) then
             raise EPYEKVSException.CreateFmt('requested arraymap ValueType %s not supported',[cPYEKVSValueTypeName[FValueTypeMap[i]]]);
 
-        result:=result+KVSStream.WriteValueType(FValueTypeMap[i]);
+        result:=result+FStoreDocument.WriteValueType(FValueTypeMap[i]);
 
     end;
 
-    FPosSize:=KVSStream.Position;
-    result:=result+KVSStream.WriteFixUInt32(0);           //Placeholder of Size-Value
+    FPosSize:=FStoreDocument.StreamPosition;
+    result:=result+FStoreDocument.WriteFixUInt32(0);           //Placeholder of Size-Value
 
-    FPosCount:=KVSStream.Position;
-    result:=result+KVSStream.WriteFixUInt32(0);           //Placeholder of Count-Value
+    FPosCount:=FStoreDocument.StreamPosition;
+    result:=result+FStoreDocument.WriteFixUInt32(0);           //Placeholder of Count-Value
 
-    FPosValues:=KVSStream.Position;
+    FPosValues:=FStoreDocument.StreamPosition;
 end;
 
 procedure TPYEKVSArrayMap.SetPutClosed();
 begin
     //Update SizeData
-    KVSStream.WriteFixUInt32(FSizeData, FPosSize);
+    FStoreDocument.WriteFixUInt32(FSizeData, FPosSize);
     //Update Count
-    KVSStream.WriteFixUInt32(FCount, FPosCount);
+    FStoreDocument.WriteFixUInt32(FCount, FPosCount);
 
     inherited SetPutClosed;
 end;
@@ -3736,7 +4046,7 @@ procedure TPYEKVSArrayMap.GetIndexPosList(const aIndex:Cardinal);
 var iPos:Int64;
 begin
     if (aIndex>=FCount)OR(FPosList.TryGetValue(aIndex, iPos)=false) then raise EPYEKVSException.CreateFmt('get array item at index %d is out of count %d',[aIndex, FCount]);
-    KVSStream.Position:=iPos;
+    FStoreDocument.StreamPosition:=iPos;
 end;
 
 procedure TPYEKVSArrayMap.PosListAdd(const aIndex: Cardinal; const aPos: Int64);
@@ -3750,24 +4060,24 @@ begin
       if Length(aValueMap)<>Length(FValueTypeMap) then
         raise EPYEKVSException.CreateFmt('arraymap put failed because given values dont match with map',[]);
 
-    KVSStream.WriteBranchSet(self);
-    PosListAdd(FCount, KVSStream.Position);
+    FStoreDocument.WriteBranchSet(self);
+    PosListAdd(FCount, FStoreDocument.StreamPosition);
 
     for iMap:=0 to High(FValueTypeMap) do begin
 
         case FValueTypeMap[iMap] of
-        pyeInt8: FSizeData:=FSizeData+KVSStream._WriteInt8(aValueMap[iMap]);
-        pyeUInt8: FSizeData:=FSizeData+KVSStream._WriteUInt8(aValueMap[iMap]);
-        pyeInt16: FSizeData:=FSizeData+KVSStream._WriteInt16(aValueMap[iMap]);
-        pyeUInt16: FSizeData:=FSizeData+KVSStream._WriteUInt16(aValueMap[iMap]);
-        pyeInt32: FSizeData:=FSizeData+KVSStream._WriteInt32(aValueMap[iMap]);
-        pyeUInt32: FSizeData:=FSizeData+KVSStream._WriteUInt32(aValueMap[iMap]);
-        pyeInt64: FSizeData:=FSizeData+KVSStream._WriteInt64(aValueMap[iMap]);
-        pyeUInt64: FSizeData:=FSizeData+KVSStream._WriteUInt64(aValueMap[iMap]);
-        pyeFloat32: FSizeData:=FSizeData+KVSStream._WriteFloat32(aValueMap[iMap]);
-        pyeFloat64: FSizeData:=FSizeData+KVSStream._WriteFloat64(aValueMap[iMap]);
-        pyeStringUTF8S: FSizeData:=FSizeData+KVSStream._WriteStringUTF8S(UTF8Encode(aValueMap[iMap]));
-        pyeStringUTF8L: FSizeData:=FSizeData+KVSStream._WriteStringUTF8L(UTF8Encode(aValueMap[iMap]));
+        pyeInt8: FSizeData:=FSizeData+FStoreDocument._WriteInt8(aValueMap[iMap]);
+        pyeUInt8: FSizeData:=FSizeData+FStoreDocument._WriteUInt8(aValueMap[iMap]);
+        pyeInt16: FSizeData:=FSizeData+FStoreDocument._WriteInt16(aValueMap[iMap]);
+        pyeUInt16: FSizeData:=FSizeData+FStoreDocument._WriteUInt16(aValueMap[iMap]);
+        pyeInt32: FSizeData:=FSizeData+FStoreDocument._WriteInt32(aValueMap[iMap]);
+        pyeUInt32: FSizeData:=FSizeData+FStoreDocument._WriteUInt32(aValueMap[iMap]);
+        pyeInt64: FSizeData:=FSizeData+FStoreDocument._WriteInt64(aValueMap[iMap]);
+        pyeUInt64: FSizeData:=FSizeData+FStoreDocument._WriteUInt64(aValueMap[iMap]);
+        pyeFloat32: FSizeData:=FSizeData+FStoreDocument._WriteFloat32(aValueMap[iMap]);
+        pyeFloat64: FSizeData:=FSizeData+FStoreDocument._WriteFloat64(aValueMap[iMap]);
+        pyeStringUTF8S: FSizeData:=FSizeData+FStoreDocument._WriteStringUTF8S(UTF8Encode(aValueMap[iMap]));
+        pyeStringUTF8L: FSizeData:=FSizeData+FStoreDocument._WriteStringUTF8L(UTF8Encode(aValueMap[iMap]));
         end;
 
     end;
@@ -3786,18 +4096,18 @@ begin
     for iMap:=0 to High(FValueTypeMap) do begin
 
         case FValueTypeMap[iMap] of
-        pyeInt8: result[iMap]:=KVSStream.ReadInt8();
-        pyeUInt8: result[iMap]:=KVSStream.ReadUInt8();
-        pyeInt16: result[iMap]:=KVSStream.ReadInt16();
-        pyeUInt16: result[iMap]:=KVSStream.ReadUInt16();
-        pyeInt32: result[iMap]:=KVSStream.ReadInt32();
-        pyeUInt32: result[iMap]:=KVSStream.ReadUInt32();
-        pyeInt64: result[iMap]:=KVSStream.ReadInt64();
-        pyeUInt64: result[iMap]:=KVSStream.ReadUInt64();
-        pyeFloat32: result[iMap]:=KVSStream.ReadFloat32();
-        pyeFloat64: result[iMap]:=KVSStream.ReadFloat64();
-        pyeStringUTF8S: result[iMap]:=UTF8ToString(KVSStream.ReadStringUTF8S());
-        pyeStringUTF8L: result[iMap]:=UTF8ToString(KVSStream.ReadStringUTF8L());
+        pyeInt8: result[iMap]:=FStoreDocument.ReadInt8();
+        pyeUInt8: result[iMap]:=FStoreDocument.ReadUInt8();
+        pyeInt16: result[iMap]:=FStoreDocument.ReadInt16();
+        pyeUInt16: result[iMap]:=FStoreDocument.ReadUInt16();
+        pyeInt32: result[iMap]:=FStoreDocument.ReadInt32();
+        pyeUInt32: result[iMap]:=FStoreDocument.ReadUInt32();
+        pyeInt64: result[iMap]:=FStoreDocument.ReadInt64();
+        pyeUInt64: result[iMap]:=FStoreDocument.ReadUInt64();
+        pyeFloat32: result[iMap]:=FStoreDocument.ReadFloat32();
+        pyeFloat64: result[iMap]:=FStoreDocument.ReadFloat64();
+        pyeStringUTF8S: result[iMap]:=UTF8ToString(FStoreDocument.ReadStringUTF8S());
+        pyeStringUTF8L: result[iMap]:=UTF8ToString(FStoreDocument.ReadStringUTF8L());
         end;
 
     end;
@@ -3814,7 +4124,7 @@ begin
     inherited;
     sIndenting:=aActIndenting+aIndenting;
 
-    KVSStream.Position:=FPosValues;
+    FStoreDocument.StreamPosition:=FPosValues;
 
     if (FCount>0) then begin            //FCount is Cardinal; FCount-1 not allowed
         for i:=0 to FCount-1 do begin
@@ -3823,7 +4133,7 @@ begin
             for iMap:=0 to High(FValueTypeMap) do begin
 
                 if (s<>'') then s:=s+Str_PYEKVSComma+Str_PYEKVSSpace;
-                s:=s+KVSStream.ReadToString( FValueTypeMap[iMap] );
+                s:=s+FStoreDocument.ReadToString( FValueTypeMap[iMap] );
 
             end;
 
@@ -3844,7 +4154,7 @@ begin
     inherited;
     sIndenting:=aActIndenting+aIndenting;
 
-    KVSStream.Position:=FPosValues;
+    FStoreDocument.StreamPosition:=FPosValues;
     if (FCount>0) then begin            //FCount is Cardinal; FCount-1 not allowed
         for i:=0 to FCount-1 do begin
 
@@ -3852,7 +4162,7 @@ begin
             for iMap:=0 to High(FValueTypeMap) do begin
 
                 if (s<>'') then s:=s+Str_PYEKVSComma+Str_PYEKVSSpace;
-                s:=s+KVSStream.ReadToString(FValueTypeMap[iMap] );
+                s:=s+FStoreDocument.ReadToString(FValueTypeMap[iMap] );
 
             end;
 
@@ -3879,7 +4189,7 @@ end;
 constructor TPYEKVSMemoryStream.Create(const aStoreDocument: TPYEKVSDocument; const aStoreParent: TPYEKVSBranch; const aKey: TPYEKVSKey);
 begin
     inherited Create(aStoreDocument, aStoreParent, aKey);
-    FValue:=TPYEKVSMemoryScope.Create(KVSStream);
+    FValue:=TPYEKVSMemoryScope.Create(FStoreDocument.Stream);
 end;
 
 constructor TPYEKVSMemoryStream.Create(const aStoreDocument: TPYEKVSDocument; const aStoreParent: TPYEKVSBranch; const aKey: TPYEKVSKey; const aPos:Int64);
@@ -3887,13 +4197,13 @@ var uSize: Cardinal;
 begin
     Create(aStoreDocument, aStoreParent, aKey);
 
-    KVSStream.Position:=aPos;
+    FStoreDocument.StreamPosition:=aPos;
 
     //Memory head
-    KVSStream.ReadFixUInt32(uSize);
+    FStoreDocument.ReadFixUInt32(uSize);
 
     //Pimp the Scope ...
-    FValue.FStartPos:=KVSStream.Position;
+    FValue.FStartPos:=FStoreDocument.StreamPosition;
     FValue.FCurrentPos:=0;
     FValue.FMaxSize:=uSize;
 end;
@@ -3926,7 +4236,7 @@ begin
     if (FSizeData<0) then
         raise EPYEKVSException.Create('TPYEKVSMemoryStream stream size failed');
 
-    KVSStream.WriteFixUInt32(FSizeData, FPosSize);
+    FStoreDocument.WriteFixUInt32(FSizeData, FPosSize);
 
     inherited SetPutClosed;
 end;
@@ -3934,14 +4244,14 @@ end;
 function TPYEKVSMemoryStream.WriteHeader: Integer;
 begin
     //write Memory Header to Data
-    result:=KVSStream.WriteValueType(pyeMemory);
-    KVSStream.WriteBranchSet(self);     //change to new branch
+    result:=FStoreDocument.WriteValueType(pyeMemory);
+    FStoreDocument.WriteBranchSet(self);     //change to new branch
 
-    FPosSize:=KVSStream.Position;
-    result:=result+KVSStream.WriteFixUInt32(0);           //Placeholder of Size-Value; Update size after memory colleted: TPYEKVSMemoryStream.SetPutClosed
+    FPosSize:=FStoreDocument.StreamPosition;
+    result:=result+FStoreDocument.WriteFixUInt32(0);           //Placeholder of Size-Value; Update size after memory colleted: TPYEKVSMemoryStream.SetPutClosed
 
     //Pimp the Scope ...
-    FValue.FStartPos:=KVSStream.Position;
+    FValue.FStartPos:=FStoreDocument.StreamPosition;
     FValue.FCurrentPos:=0;
 end;
 
@@ -4156,10 +4466,10 @@ begin
 end;
 
 initialization
-  InitValueType();
+    InitValueType();
 
-  GFormatSettingsFloat:= FormatSettings;
-  GFormatSettingsFloat.ThousandSeparator:= #0;
-  GFormatSettingsFloat.DecimalSeparator:= '.'
+    GFormatSettingsFloat:= FormatSettings;
+    GFormatSettingsFloat.ThousandSeparator:= #0;
+    GFormatSettingsFloat.DecimalSeparator:= '.'
 
 end.

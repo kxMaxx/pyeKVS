@@ -21,10 +21,22 @@ Home: [pyeKVS specification](https://www.kxtec.de/project/pyekvs/pyekvs-specific
 This pyeKVS project is a pascal implementation for Delphi. It's stores the data into a stream.
 
 ## Version
-Version: 1  
-Date: 16.01.2021  
+Version: 2
+Date: 14.03.2021  
 Author: Michael Koch  
 Home: [pyeKVS for Delphi](https://www.kxtec.de/project/pyekvs/pyekvs-delphi)  
+
+## History
+Version: 1 from 01.03.2021 for pyeKVS V 1.0
+- initial release
+Version: 2 from 14.03.2021 for pyeKVS V 1.0
+- update pyeList to use external interfaces
+- update pyeDocument
+  - New constructor to define custom container classes for
+    pyeKVSList, pyeKVSArray and pyeKVSArrayMap
+    User can overwrite these classes to e.g. define own interfaces.
+  - New constructor to define custom stream classes. Useful to write values
+    direct in userdef stream class
 
 ## License
 License:  [MIT](http://opensource.org/licenses/MIT)
