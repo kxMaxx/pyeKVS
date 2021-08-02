@@ -37,6 +37,8 @@ Version: 2 from 14.03.2021 for pyeKVS V 1.0
     User can overwrite these classes to e.g. define own interfaces.
   - New constructor to define custom stream classes. Useful to write values
     direct in userdef stream class
+Version: 3 from 02.08.2021 for pyeKVS V 1.0
+  - Interface TPYEKVSCSVOutput to create CSV output format (external unit)
 
 ## License
 License:  [MIT](http://opensource.org/licenses/MIT)
