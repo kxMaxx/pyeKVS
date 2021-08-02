@@ -21,8 +21,8 @@ Home: [pyeKVS specification](https://www.kxtec.de/project/pyekvs/pyekvs-specific
 This pyeKVS project is a pascal implementation for Delphi. It's stores the data into a stream.
 
 ## Version
-Version: 2
-Date: 14.03.2021  
+Version: 3
+Date: 02.08.2021  
 Author: Michael Koch  
 Home: [pyeKVS for Delphi](https://www.kxtec.de/project/pyekvs/pyekvs-delphi)  
 
