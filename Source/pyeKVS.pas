@@ -47,6 +47,9 @@ unit pyeKVS;
   direct in userdef stream class
   Version: 3 from 02.08.2021 for pyeKVS V 1.0
   - Interface TPYEKVSCSVOutput to create CSV output format (external unit)
+  Version: 4 from 10.01.2023 for pyeKVS V 1.0
+  - function KeyCount in List
+  - KeySorted activated if RTLVersion >= 30.0 
   ==================================================================================== }
 
 interface
@@ -484,6 +487,8 @@ type
         // Check key in this list and return ValueType (or Unknown if not exist)
         function GetKey(const aKey: TPYEKVSKey): TPYEKVSValueType;
         function KeyExists(const aKey: TPYEKVSKey): Boolean;
+
+        function KeyCount: Integer;
 
         // == Put/Get-Functions based on the requirements of the programming language ==
 
@@ -1829,8 +1834,12 @@ end;
 function TPYEKVSList.KeySorted: TArray<TPYEKVSKey>;
 begin
     result:=FKeys.Keys.ToArray;
-    // Sort erzeugt in XE5 Exception!
-    // System.Generics.Collections.TArray.Sort<TPYEKVSKey>(result);
+
+    {$IF RTLVersion >= 30.0}
+    //Warning: TArray.Sort raised an Exception in XE5
+    System.Generics.Collections.TArray.Sort<TPYEKVSKey>(result);
+    {$ENDIF}
+
 end;
 
 
@@ -1848,6 +1857,11 @@ end;
 function TPYEKVSList.KeyExists(const aKey: TPYEKVSKey): Boolean;
 begin
     result:=FKeys.ContainsKey(aKey);
+end;
+
+function TPYEKVSList.KeyCount: Integer;
+begin
+    result:=FKeys.Keys.Count;
 end;
 
 

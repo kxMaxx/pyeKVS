@@ -439,7 +439,6 @@ begin
     FTextL_0:=L1.GetString('TextL_0');
     FTextL_1:=L1.GetString('TextL_1');
 
-
     // Array test ...
     L1:=aStoreList.GetList('List_Array');
     A1:=L1.GetArray('Array_Int');
